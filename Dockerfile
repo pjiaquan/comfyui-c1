@@ -99,7 +99,11 @@ RUN mkdir -p ${COMFY_DIR}/custom_nodes && \
     git clone --depth=1 https://github.com/rgthree/rgthree-comfy.git ${COMFY_DIR}/custom_nodes/rgthree-comfy && \
     git clone --depth=1 https://github.com/ClownsharkBatwing/RES4LYF.git ${COMFY_DIR}/custom_nodes/RES4LYF && \
     git clone --depth=1 https://github.com/alexopus/ComfyUI-Image-Saver.git ${COMFY_DIR}/custom_nodes/comfyui-image-saver && \
-    git clone --depth=1 https://github.com/kijai/ComfyUI-KJNodes.git ${COMFY_DIR}/custom_nodes/comfyui-kjnodes
+    git clone --depth=1 https://github.com/kijai/ComfyUI-KJNodes.git ${COMFY_DIR}/custom_nodes/comfyui-kjnodes && \
+    git clone --depth=1 https://github.com/cubiq/ComfyUI_essentials.git /opt/ComfyUI/custom_nodes/comfyui_essentials && \
+    git clone --depth=1 https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git /opt/ComfyUI/custom_nodes/comfyui-videohelpersuite && \
+    git clone --depth=1 https://github.com/yolain/ComfyUI-Easy-Use.git /opt/ComfyUI/custom_nodes/comfyui-easy-use && \
+    git clone --depth=1 https://github.com/IuvenisSapiens/ComfyUI_Qwen3-VL-Instruct.git /opt/ComfyUI/custom_nodes/ComfyUI_Qwen3-VL-Instruct
 
 # 8) Install custom node requirements if present
 RUN find ${COMFY_DIR}/custom_nodes -maxdepth 2 -name requirements.txt -print0 | \
