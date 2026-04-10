@@ -22,6 +22,7 @@ COPY scripts/civitai-download.sh /opt/bin/civitai-download.sh
 COPY scripts/download.sh /opt/bin/download.sh
 COPY scripts/st.py /opt/bin/st.py
 COPY scripts/entrypoint.sh /opt/bin/entrypoint.sh
+COPY scripts/models.manifest /opt/config/models.manifest
 
 RUN chmod +x /opt/bin/hf-download.sh /opt/bin/civitai-download.sh /opt/bin/download.sh
 RUN chmod +x /opt/bin/entrypoint.sh
