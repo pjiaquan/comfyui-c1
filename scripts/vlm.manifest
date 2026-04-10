@@ -1,0 +1,11 @@
+# TYPE|SOURCE|DEST_DIR|FILENAME
+
+# --- Wan Remix UNETs ---
+HF|https://huggingface.co/FX-FeiHou/wan2.2-Remix/blob/main/NSFW/Wan2.2_Remix_NSFW_i2v_14b_high_lighting_fp8_e4m3fn_v3.0.safetensors |/opt/ComfyUI/models/diffusion_models|Wan2.2_Remix_NSFW_i2v_14b_high_lighting_v2.0.safetensors
+HF|https://huggingface.co/FX-FeiHou/wan2.2-Remix/blob/main/NSFW/Wan2.2_Remix_NSFW_i2v_14b_low_lighting_fp8_e4m3fn_v3.0.safetensors |/opt/ComfyUI/models/diffusion_models|Wan2.2_Remix_NSFW_i2v_14b_low_lighting_v2.0.safetensors
+
+# --- Wan text encoder / clip ---
+HF|https://huggingface.co/NSFW-API/NSFW-Wan-UMT5-XXL/blob/main/nsfw_wan_umt5-xxl_fp8_scaled.safetensors|/opt/ComfyUI/models/text_encoders|nsfw_wan_umt5-xxl_fp8_scaled.safetensors
+
+# --- Wan VAE ---
+HF|https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors|/opt/ComfyUI/models/vae|wan_2.1_vae.safetensors

@@ -20,6 +20,7 @@ mkdir -p \
   "${COMFY_DIR}/models/text_encoders" \
   "${COMFY_DIR}/models/vae" \
   "${COMFY_DIR}/models/loras" \
+  "${COMFY_DIR}/models/unet" \
   "${COMFY_DIR}/input" \
   "${COMFY_DIR}/output"
 
@@ -141,12 +142,3 @@ exec "${PYTHON_BIN}" main.py \
   --normalvram \
   "${EXTRA_ARGS[@]}" \
   "$@"
-
-cd "${COMFY_DIR}"
-exec "${PYTHON_BIN}" main.py \
-  --listen 0.0.0.0 \
-  --port 8188 \
-  --normalvram \
-  "${EXTRA_ARGS[@]}" \
-  "$@"
-
