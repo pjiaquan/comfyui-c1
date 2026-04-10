@@ -1,0 +1,8 @@
+HF|https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors|/opt/ComfyUI/models/text_encoders|qwen_2.5_vl_7b_fp8_scaled.safetensors
+HF|https://huggingface.co/Phr00t/Qwen-Image-Edit-Rapid-AIO/resolve/main/v23/Qwen-Rapid-AIO-NSFW-v23.safetensors|/opt/ComfyUI/models/checkpoints|Qwen-Rapid-AIO-NSFW-v23.safetensors
+HF|https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors|/opt/ComfyUI/models/vae|qwen_image_vae.safetensors
+HF|https://huggingface.co/JackieZaaa/Qwen-consistence_edit_v2.safetensors/resolve/main/Qwen-consistence_edit_v2.safetensors|/opt/ComfyUI/models/loras|Qwen-consistence_edit_v2.safetensors
+HF|https://huggingface.co/DiffSynth-Studio/Qwen-Image-Edit-F2P/resolve/main/edit_0928_lora_step40000.safetensors|/opt/ComfyUI/models/loras|edit_0928_lora_step40000.safetensors
+CIVITAI|2585269|/opt/ComfyUI/models/loras|jib_qwen_fix_000002750.safetensors
+# 可選模型
+HF_OPTIONAL|https://huggingface.co/fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA/resolve/main/qwen-image-edit-2511-multiple-angles-lora.safetensors|/opt/ComfyUI/models/loras|qwen-image-edit-2511-multiple-angles-lora.safetensors|DOWNLOAD_MULTIPLE_ANGLES_LORA
