@@ -50,6 +50,9 @@ download_hf_url_if_missing() {
   fi
 
   log "Downloading from HF: ${filename}"
+  log "HF source URL: ${url}"
+  log "HF expected file: ${outdir}/${filename}"
+
   /opt/bin/hf-download.sh "${url}" "${outdir}"
 
   if ! need_file "${outdir}/${filename}"; then
