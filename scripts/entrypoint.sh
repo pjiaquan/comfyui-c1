@@ -4,8 +4,16 @@ set -Eeuo pipefail
 COMFY_DIR="${COMFY_DIR:-/opt/ComfyUI}"
 VENV_DIR="${VENV_DIR:-/opt/venv}"
 PYTHON_BIN="${PYTHON_BIN:-${VENV_DIR}/bin/python}"
+MANIFEST_PATH="${MANIFEST_PATH:-/opt/config/models.manifest}"
 
 log() { echo "[ENTRYPOINT] $*"; }
+
+trim() {
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "$s"
+}
 
 cleanup() {
   echo "[ENTRYPOINT] shutting down..."
@@ -28,8 +36,6 @@ need_file() {
   local path="$1"
   [[ -s "$path" ]]
 }
-
-MANIFEST_PATH="${MANIFEST_PATH:-/opt/config/models.manifest}"
 
 download_hf_url_if_missing() {
   local url="$1"
@@ -82,43 +88,48 @@ process_manifest() {
   }
 
   while IFS='|' read -r type source dest filename env_flag; do
-    # 跳過空行與註解
-    [[ -z "${type:-}" ]] && continue
-    [[ "${type:0:1}" == "#" ]] && continue
+	 type="$(trim "${type:-}")"
+	 source="$(trim "${source:-}")"
+	 dest="$(trim "${dest:-}")"
+	 filename="$(trim "${filename:-}")"
+	 env_flag="$(trim "${env_flag:-}")"
 
-    case "$type" in
-      HF)
-        download_hf_url_if_missing "$source" "$dest" "$filename"
-        ;;
-      CIVITAI)
-        download_civitai_if_missing "$source" "$dest" "$filename"
-        ;;
-      HF_OPTIONAL)
-        if [[ "${!env_flag:-0}" == "1" ]]; then
-          download_hf_url_if_missing "$source" "$dest" "$filename"
-        else
-          log "Skipping optional HF model: $filename (env ${env_flag}=0)"
-        fi
-        ;;
-      CIVITAI_OPTIONAL)
-        if [[ "${!env_flag:-0}" == "1" ]]; then
-          download_civitai_if_missing "$source" "$dest" "$filename"
-        else
-          log "Skipping optional Civitai model: $filename (env ${env_flag}=0)"
-        fi
-        ;;
-      *)
-        log "ERROR: unknown manifest type: $type"
-        exit 1
-        ;;
-    esac
-  done < "$manifest"
+	  [[ -z "${type:-}" ]] && continue
+	  [[ "${type:0:1}" == "#" ]] && continue
+
+	  case "$type" in
+	    HF)
+	      download_hf_url_if_missing "$source" "$dest" "$filename"
+	      ;;
+	    CIVITAI)
+	      download_civitai_if_missing "$source" "$dest" "$filename"
+	      ;;
+	    HF_OPTIONAL)
+	      if [[ -n "${env_flag:-}" && "${!env_flag:-0}" == "1" ]]; then
+	        download_hf_url_if_missing "$source" "$dest" "$filename"
+	      else
+	        log "Skipping optional HF model: $filename"
+	      fi
+	      ;;
+	    CIVITAI_OPTIONAL)
+	      if [[ -n "${env_flag:-}" && "${!env_flag:-0}" == "1" ]]; then
+	        download_civitai_if_missing "$source" "$dest" "$filename"
+	      else
+	        log "Skipping optional Civitai model: $filename"
+	      fi
+	      ;;
+	    *)
+	      log "ERROR: unknown manifest type: $type"
+	      exit 1
+	      ;;
+	  esac
+	done < "$manifest"
 }
 
 process_manifest "${MANIFEST_PATH}"
 
 # 啟動輔助程序
-if [[ "${ENABLE_ST:1}" == "1" ]]; then
+if [[ "${ENABLE_ST:-1}" == "1" ]]; then
   ${VENV_DIR}/bin/python3 /opt/bin/st.py &
   ST_PID=$!
 
