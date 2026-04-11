@@ -79,6 +79,23 @@ download_civitai_if_missing() {
   fi
 }
 
+infer_filename() {
+  local type="$1"
+  local source="$2"
+
+  case "$type" in
+    HF|HF_OPTIONAL)
+      basename "${source%%\?*}"
+      ;;
+    CIVITAI|CIVITAI_OPTIONAL)
+      printf ''
+      ;;
+    *)
+      printf ''
+      ;;
+  esac
+}
+
 process_manifest() {
   local manifest="$1"
 
@@ -88,42 +105,124 @@ process_manifest() {
   }
 
   while IFS='|' read -r type source dest filename env_flag; do
-	 type="$(trim "${type:-}")"
-	 source="$(trim "${source:-}")"
-	 dest="$(trim "${dest:-}")"
-	 filename="$(trim "${filename:-}")"
-	 env_flag="$(trim "${env_flag:-}")"
+    type="$(trim "${type:-}")"
+    source="$(trim "${source:-}")"
+    dest="$(trim "${dest:-}")"
+    filename="$(trim "${filename:-}")"
+    env_flag="$(trim "${env_flag:-}")"
 
-	  [[ -z "${type:-}" ]] && continue
-	  [[ "${type:0:1}" == "#" ]] && continue
+    [[ -z "${type:-}" ]] && continue
+    [[ "${type:0:1}" == "#" ]] && continue
 
-	  case "$type" in
-	    HF)
-	      download_hf_url_if_missing "$source" "$dest" "$filename"
-	      ;;
-	    CIVITAI)
-	      download_civitai_if_missing "$source" "$dest" "$filename"
-	      ;;
-	    HF_OPTIONAL)
-	      if [[ -n "${env_flag:-}" && "${!env_flag:-0}" == "1" ]]; then
-	        download_hf_url_if_missing "$source" "$dest" "$filename"
-	      else
-	        log "Skipping optional HF model: $filename"
-	      fi
-	      ;;
-	    CIVITAI_OPTIONAL)
-	      if [[ -n "${env_flag:-}" && "${!env_flag:-0}" == "1" ]]; then
-	        download_civitai_if_missing "$source" "$dest" "$filename"
-	      else
-	        log "Skipping optional Civitai model: $filename"
-	      fi
-	      ;;
-	    *)
-	      log "ERROR: unknown manifest type: $type"
-	      exit 1
-	      ;;
-	  esac
-	done < "$manifest"
+    if [[ -z "$filename" ]]; then
+      filename="$(infer_filename "$type" "$source")"
+    fi
+
+    case "$type" in
+      HF)
+        [[ -n "$filename" ]] || { log "ERROR: filename cannot be inferred for $source"; exit 1; }
+        download_hf_url_if_missing "$source" "$dest" "$filename"
+        ;;
+      CIVITAI)
+        [[ -n "$filename" ]] || { log "ERROR: CIVITAI requires filename: $source"; exit 1; }
+        download_civitai_if_missing "$source" "$dest" "$filename"
+        ;;
+      HF_OPTIONAL)
+        if [[ -n "${env_flag:-}" && "${!env_flag:-0}" == "1" ]]; then
+          [[ -n "$filename" ]] || { log "ERROR: filename cannot be inferred for $source"; exit 1; }
+          download_hf_url_if_missing "$source" "$dest" "$filename"
+        else
+          log "Skipping optional HF model: ${filename:-$source}"
+        fi
+        ;;
+      CIVITAI_OPTIONAL)
+        if [[ -n "${env_flag:-}" && "${!env_flag:-0}" == "1" ]]; then
+          [[ -n "$filename" ]] || { log "ERROR: CIVITAI requires filename: $source"; exit 1; }
+          download_civitai_if_missing "$source" "$dest" "$filename"
+        else
+          log "Skipping optional Civitai model: ${filename:-$source}"
+        fi
+        ;;
+      *)
+        log "ERROR: unknown manifest type: $type"
+        exit 1
+        ;;
+    esac
+  done < "$manifest"
+}
+
+
+
+infer_filename() {
+  local type="$1"
+  local source="$2"
+
+  case "$type" in
+    HF|HF_OPTIONAL)
+      basename "${source%%\?*}"
+      ;;
+    CIVITAI|CIVITAI_OPTIONAL)
+      printf ''
+      ;;
+    *)
+      printf ''
+      ;;
+  esac
+}
+
+process_manifest() {
+  local manifest="$1"
+
+  [[ -f "$manifest" ]] || {
+    log "ERROR: manifest not found: $manifest"
+    exit 1
+  }
+
+  while IFS='|' read -r type source dest filename env_flag; do
+    type="$(trim "${type:-}")"
+    source="$(trim "${source:-}")"
+    dest="$(trim "${dest:-}")"
+    filename="$(trim "${filename:-}")"
+    env_flag="$(trim "${env_flag:-}")"
+
+    [[ -z "${type:-}" ]] && continue
+    [[ "${type:0:1}" == "#" ]] && continue
+
+    if [[ -z "$filename" ]]; then
+      filename="$(infer_filename "$type" "$source")"
+    fi
+
+    case "$type" in
+      HF)
+        [[ -n "$filename" ]] || { log "ERROR: filename cannot be inferred for $source"; exit 1; }
+        download_hf_url_if_missing "$source" "$dest" "$filename"
+        ;;
+      CIVITAI)
+        [[ -n "$filename" ]] || { log "ERROR: CIVITAI requires filename: $source"; exit 1; }
+        download_civitai_if_missing "$source" "$dest" "$filename"
+        ;;
+      HF_OPTIONAL)
+        if [[ -n "${env_flag:-}" && "${!env_flag:-0}" == "1" ]]; then
+          [[ -n "$filename" ]] || { log "ERROR: filename cannot be inferred for $source"; exit 1; }
+          download_hf_url_if_missing "$source" "$dest" "$filename"
+        else
+          log "Skipping optional HF model: ${filename:-$source}"
+        fi
+        ;;
+      CIVITAI_OPTIONAL)
+        if [[ -n "${env_flag:-}" && "${!env_flag:-0}" == "1" ]]; then
+          [[ -n "$filename" ]] || { log "ERROR: CIVITAI requires filename: $source"; exit 1; }
+          download_civitai_if_missing "$source" "$dest" "$filename"
+        else
+          log "Skipping optional Civitai model: ${filename:-$source}"
+        fi
+        ;;
+      *)
+        log "ERROR: unknown manifest type: $type"
+        exit 1
+        ;;
+    esac
+  done < "$manifest"
 }
 
 process_manifest "${MANIFEST_PATH}"
