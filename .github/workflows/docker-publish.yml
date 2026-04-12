@@ -25,4 +25,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/comfyui-c1:latest
