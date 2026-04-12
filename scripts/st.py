@@ -26,7 +26,7 @@ CHAT_ID = os.environ.get("MyD3_TELEGRAM_CHAT_ID")
 RECURSIVE_WATCH = True
 
 # 上傳成功後是否刪檔
-DELETE_AFTER_SEND = True
+DELETE_AFTER_SEND = False
 
 # 檔案穩定檢查設定
 FILE_STABLE_CHECK_INTERVAL = 1.0   # 秒
@@ -257,7 +257,8 @@ def main() -> None:
     watch_path.mkdir(parents=True, exist_ok=True)
 
     # 1. 先掃描現有檔案（可深入子資料夾）
-    process_existing_files(WATCH_DIRECTORY, recursive=RECURSIVE_WATCH)
+    # (已停用 initial scan，避免重新啟動時重複上傳未刪除的舊檔案)
+    # process_existing_files(WATCH_DIRECTORY, recursive=RECURSIVE_WATCH)
 
     # 2. 再開始監控
     event_handler = MediaHandler()
