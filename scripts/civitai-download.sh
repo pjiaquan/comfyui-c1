@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-MODEL_VERSION_ID="${1:-}"
-DEST_DIR="${2:-}"
+INPUT_TARGET="${1:-}"
+DEST_DIR="${2:-.}"
 TOKEN="${3:-${CIVITAI_TOKEN:-}}"
 EXPECTED_FILENAME="${4:-}"
 
 log() { echo "[INFO] $*" >&2; }
 die() { echo "[ERROR] $*" >&2; exit 1; }
 
-if [[ -z "$MODEL_VERSION_ID" || -z "$DEST_DIR" ]]; then
-  die "Usage: $0 <model_version_id> <dest_dir> [token] [expected_filename]"
+if [[ -z "$INPUT_TARGET" ]]; then
+  die "Usage: $0 <model_version_id_or_url> [dest_dir] [token] [expected_filename]"
 fi
 
 if [[ -z "$TOKEN" ]]; then
@@ -28,7 +28,17 @@ need_cmd ls || die "ls is required."
 
 mkdir -p "$DEST_DIR"
 
-DOWNLOAD_URL="https://civitai.com/api/download/models/${MODEL_VERSION_ID}"
+if [[ "$INPUT_TARGET" =~ ^https?:// ]]; then
+  DOWNLOAD_URL="$INPUT_TARGET"
+  if [[ "$INPUT_TARGET" =~ /models/([0-9]+) ]]; then
+    MODEL_VERSION_ID="${BASH_REMATCH[1]}"
+  else
+    MODEL_VERSION_ID="unknown_model"
+  fi
+else
+  MODEL_VERSION_ID="$INPUT_TARGET"
+  DOWNLOAD_URL="https://civitai.com/api/download/models/${MODEL_VERSION_ID}"
+fi
 
 TMP_HEADERS="$(mktemp)"
 cleanup() {

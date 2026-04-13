@@ -113,7 +113,8 @@ RUN mkdir -p ${COMFY_DIR}/custom_nodes && \
     git clone --depth=1 https://github.com/sipherxyz/comfyui-art-venture.git ${COMFY_DIR}/custom_nodes/comfyui-art-venture && \
     git clone --depth=1 https://github.com/Smirnov75/ComfyUI-mxToolkit.git ${COMFY_DIR}/custom_nodes/ComfyUI-mxToolkit && \
     git clone --depth=1 https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git ${COMFY_DIR}/custom_nodes/ComfyUI-Frame-Interpolation && \
-    git clone --depth=1 https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git ${COMFY_DIR}/custom_nodes/ComfyUI-Custom-Scripts
+    git clone --depth=1 https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git ${COMFY_DIR}/custom_nodes/ComfyUI-Custom-Scripts && \
+    git clone --depth=1 https://github.com/stduhpf/ComfyUI-WanMoeKSampler.git ${COMFY_DIR}/custom_nodes/ComfyUI-WanMoeKSampler
 
 # 8) Install custom node requirements if present
 RUN find ${COMFY_DIR}/custom_nodes -maxdepth 2 -name requirements.txt -print0 | \

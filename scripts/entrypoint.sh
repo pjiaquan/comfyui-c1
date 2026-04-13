@@ -15,7 +15,7 @@ VRAM_MODE="${VRAM_MODE:-normalvram}"
 FAIL_FAST="${FAIL_FAST:-0}"
 MANIFEST_REQUIRED="${MANIFEST_REQUIRED:-1}"
 ENABLE_ST="${ENABLE_ST:-1}"
-ENABLE_MANAGER="${ENABLE_MANAGER:-0}"
+ENABLE_MANAGER="${ENABLE_MANAGER:-1}"
 ST_START_TIMEOUT="${ST_START_TIMEOUT:-1}"
 
 FAILED_DOWNLOADS=()
@@ -141,19 +141,19 @@ download_civitai_if_missing() {
 
   mkdir -p "$outdir"
 
-  if need_file "${outdir}/${expected_name}"; then
+  if [[ -n "$expected_name" ]] && need_file "${outdir}/${expected_name}"; then
     log "Exists: ${outdir}/${expected_name}"
     return 0
   fi
 
-  log "Downloading from Civitai: ${expected_name}"
+  log "Downloading from Civitai: ${expected_name:-$model_version_id}"
 
   if ! "${CIVITAI_DOWNLOAD_BIN}" "${model_version_id}" "${outdir}" "${CIVITAI_TOKEN:-}" "${expected_name}"; then
-    record_failure "Civitai download failed for ${expected_name}"
+    record_failure "Civitai download failed for ${expected_name:-$model_version_id}"
     return 0
   fi
 
-  if ! need_file "${outdir}/${expected_name}"; then
+  if [[ -n "$expected_name" ]] && ! need_file "${outdir}/${expected_name}"; then
     record_failure "Expected file missing after Civitai download: ${outdir}/${expected_name}"
   fi
 }
@@ -192,7 +192,6 @@ process_manifest_line() {
       download_hf_url_if_missing "$source" "$dest" "$filename"
       ;;
     CIVITAI)
-      [[ -n "$filename" ]] || die "Manifest line ${line_no}: CIVITAI requires an explicit filename"
       download_civitai_if_missing "$source" "$dest" "$filename"
       ;;
     HF_OPTIONAL)
@@ -207,7 +206,6 @@ process_manifest_line() {
     CIVITAI_OPTIONAL)
       [[ -n "$env_flag" ]] || die "Manifest line ${line_no}: CIVITAI_OPTIONAL requires an env flag"
       if should_download_optional "$env_flag"; then
-        [[ -n "$filename" ]] || die "Manifest line ${line_no}: CIVITAI_OPTIONAL requires an explicit filename"
         download_civitai_if_missing "$source" "$dest" "$filename"
       else
         log "Skipping optional Civitai model on line ${line_no}: ${filename:-$source}"
