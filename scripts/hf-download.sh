@@ -78,6 +78,19 @@ FINAL_PATH="${TARGET_DIR}/$(basename "$REPO_FILE")"
 
 if [ "$DOWNLOADED_PATH" != "$FINAL_PATH" ]; then
   mv -f "$DOWNLOADED_PATH" "$FINAL_PATH"
+  
+  # Clean up residual empty directories created by Hugging Face CLI when path has subfolders
+  CURRENT_DIR="$(dirname "$DOWNLOADED_PATH")"
+  TARGET_DIR_ABS="$(cd "$TARGET_DIR" 2>/dev/null && pwd || echo "$TARGET_DIR")"
+  
+  while [ -n "$CURRENT_DIR" ] && [ "$CURRENT_DIR" != "." ] && [ "$CURRENT_DIR" != "/" ]; do
+    CURRENT_DIR_ABS="$(cd "$CURRENT_DIR" 2>/dev/null && pwd || echo "$CURRENT_DIR")"
+    if [ "$CURRENT_DIR_ABS" = "$TARGET_DIR_ABS" ]; then
+      break
+    fi
+    rmdir "$CURRENT_DIR" 2>/dev/null || break
+    CURRENT_DIR="$(dirname "$CURRENT_DIR")"
+  done
 fi
 
 log "Success: $FINAL_PATH"

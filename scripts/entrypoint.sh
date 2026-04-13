@@ -260,6 +260,11 @@ process_manifest() {
 start_st() {
   local waited=0
 
+  if [[ -z "${MyD3_TELEGRAM_BOT_TOKEN:-}" || -z "${MyD3_TELEGRAM_CHAT_ID:-}" ]]; then
+    warn "Telegram credentials (MyD3_TELEGRAM_BOT_TOKEN/MyD3_TELEGRAM_CHAT_ID) missing. Skipping st.py helper."
+    return 0
+  fi
+
   require_path "$ST_PY_PATH" "st.py helper"
   log "Starting st.py helper"
   "${ST_PYTHON_BIN}" "${ST_PY_PATH}" &
