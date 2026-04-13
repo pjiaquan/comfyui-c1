@@ -103,7 +103,17 @@ RUN mkdir -p ${COMFY_DIR}/custom_nodes && \
     git clone --depth=1 https://github.com/cubiq/ComfyUI_essentials.git /opt/ComfyUI/custom_nodes/comfyui_essentials && \
     git clone --depth=1 https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git /opt/ComfyUI/custom_nodes/comfyui-videohelpersuite && \
     git clone --depth=1 https://github.com/yolain/ComfyUI-Easy-Use.git /opt/ComfyUI/custom_nodes/comfyui-easy-use && \
-    git clone --depth=1 https://github.com/IuvenisSapiens/ComfyUI_Qwen3-VL-Instruct.git /opt/ComfyUI/custom_nodes/ComfyUI_Qwen3-VL-Instruct
+    git clone --depth=1 https://github.com/IuvenisSapiens/ComfyUI_Qwen3-VL-Instruct.git /opt/ComfyUI/custom_nodes/ComfyUI_Qwen3-VL-Instruct && \
+    git clone --depth=1 https://github.com/kijai/ComfyUI-GIMM-VFI.git ${COMFY_DIR}/custom_nodes/ComfyUI-GIMM-VFI && \
+    git clone --depth=1 https://github.com/M1kep/ComfyLiterals.git ${COMFY_DIR}/custom_nodes/ComfyLiterals && \
+    git clone --depth=1 https://github.com/boobkake22/ComfyUI-SimpleSwitch.git ${COMFY_DIR}/custom_nodes/ComfyUI-SimpleSwitch && \
+    git clone --depth=1 https://github.com/boobkake22/ComfyUI-WanResolutions.git ${COMFY_DIR}/custom_nodes/ComfyUI-WanResolutions && \
+    git clone --depth=1 https://github.com/boobkake22/ComfyUI-FilmGrainLTXV.git ${COMFY_DIR}/custom_nodes/ComfyUI-FilmGrainLTXV && \
+    git clone --depth=1 https://github.com/VraethrDalkr/ComfyUI-TripleKSampler.git ${COMFY_DIR}/custom_nodes/ComfyUI-TripleKSampler && \
+    git clone --depth=1 https://github.com/sipherxyz/comfyui-art-venture.git ${COMFY_DIR}/custom_nodes/comfyui-art-venture && \
+    git clone --depth=1 https://github.com/Smirnov75/ComfyUI-mxToolkit.git ${COMFY_DIR}/custom_nodes/ComfyUI-mxToolkit && \
+    git clone --depth=1 https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git ${COMFY_DIR}/custom_nodes/ComfyUI-Frame-Interpolation && \
+    git clone --depth=1 https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git ${COMFY_DIR}/custom_nodes/ComfyUI-Custom-Scripts
 
 # 8) Install custom node requirements if present
 RUN find ${COMFY_DIR}/custom_nodes -maxdepth 2 -name requirements.txt -print0 | \
