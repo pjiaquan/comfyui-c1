@@ -11,7 +11,7 @@ ST_PY_PATH="${ST_PY_PATH:-/opt/bin/st.py}"
 ST_PYTHON_BIN="${ST_PYTHON_BIN:-${VENV_DIR}/bin/python3}"
 LISTEN_HOST="${LISTEN_HOST:-0.0.0.0}"
 PORT="${PORT:-8188}"
-VRAM_MODE="${VRAM_MODE:-normalvram}"
+VRAM_MODE="${VRAM_MODE:-auto}"
 FAIL_FAST="${FAIL_FAST:-0}"
 MANIFEST_REQUIRED="${MANIFEST_REQUIRED:-1}"
 ENABLE_ST="${ENABLE_ST:-1}"
@@ -259,7 +259,7 @@ start_st() {
   local waited=0
 
   if [[ -z "${MyD3_TELEGRAM_BOT_TOKEN:-}" || -z "${MyD3_TELEGRAM_CHAT_ID:-}" ]]; then
-    warn "Telegram credentials (MyD3_TELEGRAM_BOT_TOKEN/MyD3_TELEGRAM_CHAT_ID) missing. Skipping st.py helper."
+    warn "Telegram credentials (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID) missing. Skipping st.py helper."
     return 0
   fi
 
@@ -288,6 +288,30 @@ start_st() {
 
 build_comfy_command() {
   local -n _cmd_ref=$1
+
+  if [[ "$VRAM_MODE" == "auto" ]]; then
+    if need_cmd nvidia-smi; then
+      local vram_mb
+      vram_mb=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | awk '{print $1}' | head -n 1)
+      if [[ -n "$vram_mb" && "$vram_mb" =~ ^[0-9]+$ ]]; then
+        if (( vram_mb >= 16000 )); then
+          VRAM_MODE="highvram"
+        elif (( vram_mb < 8000 )); then
+          VRAM_MODE="lowvram"
+        else
+          VRAM_MODE="normalvram"
+        fi
+        log "Auto-detected GPU with ${vram_mb}MB VRAM. Using ${VRAM_MODE} mode."
+      else
+        VRAM_MODE="normalvram"
+        warn "Could not parse VRAM from nvidia-smi. Falling back to normalvram."
+      fi
+    else
+      VRAM_MODE="cpu"
+      log "nvidia-smi not found. Falling back to cpu mode."
+    fi
+  fi
+
   _cmd_ref=(
     "${PYTHON_BIN}" main.py
     --listen "${LISTEN_HOST}"
