@@ -8,6 +8,7 @@
 import os
 import sys
 import time
+import traceback
 from pathlib import Path
 from typing import Optional
 
@@ -15,12 +16,29 @@ import requests
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
+
+def env_int(name: str, default: int, minimum: int = 1) -> int:
+    try:
+        return max(minimum, int(os.environ.get(name, str(default))))
+    except ValueError:
+        return default
+
+
 # =========================
 # Configuration
 # =========================
 WATCH_DIRECTORY = os.environ.get("WATCH_DIRECTORY", "/opt/ComfyUI/output")
-BOT_TOKEN = os.environ.get("MyD3_TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.environ.get("MyD3_TELEGRAM_CHAT_ID")
+BOT_TOKEN = os.environ.get("MyD3_TELEGRAM_BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.environ.get("MyD3_TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_CHAT_ID")
+TELEGRAM_ERROR_LOGS = os.environ.get("TELEGRAM_ERROR_LOGS", "1").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+TELEGRAM_ERROR_LOG_MAX_CHARS = env_int("TELEGRAM_ERROR_LOG_MAX_CHARS", 3500)
+TELEGRAM_ERROR_LOG_RETRIES = env_int("TELEGRAM_ERROR_LOG_RETRIES", 2, minimum=0)
+TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER = env_int("TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER", 30)
 
 # 遞迴監看子資料夾
 RECURSIVE_WATCH = True
@@ -43,20 +61,103 @@ REQUEST_TIMEOUT = 120
 MAX_RETRIES = 3
 RETRY_DELAY = 3
 
+ERROR_LOG_PATTERNS = (
+    "error",
+    "failed",
+    "failure",
+    "timeout",
+    "missing",
+    "unsupported",
+    "disappeared",
+    "skipping unstable",
+)
+_SENDING_ERROR_LOG = False
+
 
 # =========================
 # Utilities
 # =========================
 def log(message: str) -> None:
     print(message, flush=True)
+    if should_notify_error(message):
+        send_error_log_to_telegram(message)
+
+
+def should_notify_error(message: str) -> bool:
+    lowered = message.lower()
+    return any(pattern in lowered for pattern in ERROR_LOG_PATTERNS)
+
+
+def send_error_log_to_telegram(message: str) -> None:
+    global _SENDING_ERROR_LOG
+
+    if _SENDING_ERROR_LOG or not TELEGRAM_ERROR_LOGS or not BOT_TOKEN or not CHAT_ID:
+        return
+
+    text = f"[st.py] ERROR\n{message}"
+    if len(text) > TELEGRAM_ERROR_LOG_MAX_CHARS:
+        text = text[:TELEGRAM_ERROR_LOG_MAX_CHARS] + "\n... truncated"
+
+    try:
+        _SENDING_ERROR_LOG = True
+        for attempt in range(TELEGRAM_ERROR_LOG_RETRIES + 1):
+            response = requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                data={
+                    "chat_id": CHAT_ID,
+                    "text": text,
+                },
+                timeout=30,
+            )
+            if response.ok:
+                return
+
+            if response.status_code == 429 and attempt < TELEGRAM_ERROR_LOG_RETRIES:
+                retry_after = telegram_retry_after(response)
+                sleep_seconds = min(retry_after, TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER)
+                print(
+                    "Telegram rate limited error log; "
+                    f"retrying in {sleep_seconds}s.",
+                    flush=True,
+                )
+                time.sleep(sleep_seconds)
+                continue
+
+            print(
+                "Failed to send Telegram error log: "
+                f"{response.status_code} {response.text}",
+                flush=True,
+            )
+            return
+    except Exception as exc:
+        print(f"Failed to send Telegram error log: {exc}", flush=True)
+    finally:
+        _SENDING_ERROR_LOG = False
+
+
+def telegram_retry_after(response: requests.Response) -> int:
+    try:
+        retry_after = response.json().get("parameters", {}).get("retry_after", 1)
+        return max(1, int(retry_after))
+    except Exception:
+        return 1
+
+
+def notify_uncaught_exception(exc_type, exc_value, exc_traceback) -> None:
+    formatted = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+    print(formatted, file=sys.stderr, flush=True)
+    send_error_log_to_telegram(formatted)
+
+
+sys.excepthook = notify_uncaught_exception
 
 
 def validate_env() -> None:
     if not BOT_TOKEN or not CHAT_ID:
         log("Error: Missing environment variables.")
         log("Required:")
-        log("  - MyD3_TELEGRAM_BOT_TOKEN")
-        log("  - MyD3_TELEGRAM_CHAT_ID")
+        log("  - MyD3_TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN")
+        log("  - MyD3_TELEGRAM_CHAT_ID or TELEGRAM_CHAT_ID")
         sys.exit(1)
 
 

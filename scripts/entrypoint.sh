@@ -17,8 +17,32 @@ MANIFEST_REQUIRED="${MANIFEST_REQUIRED:-1}"
 ENABLE_ST="${ENABLE_ST:-1}"
 ENABLE_MANAGER="${ENABLE_MANAGER:-1}"
 ST_START_TIMEOUT="${ST_START_TIMEOUT:-1}"
+TELEGRAM_ERROR_LOGS="${TELEGRAM_ERROR_LOGS:-1}"
+TELEGRAM_ERROR_LOG_MAX_CHARS="${TELEGRAM_ERROR_LOG_MAX_CHARS:-3500}"
+TELEGRAM_ERROR_LOG_TIMEOUT="${TELEGRAM_ERROR_LOG_TIMEOUT:-10}"
+TELEGRAM_ERROR_LOG_NAME="${TELEGRAM_ERROR_LOG_NAME:-ComfyUI entrypoint}"
+TELEGRAM_ERROR_LOG_RETRIES="${TELEGRAM_ERROR_LOG_RETRIES:-2}"
+TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER="${TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER:-30}"
+
+if ! [[ "$TELEGRAM_ERROR_LOG_MAX_CHARS" =~ ^[0-9]+$ ]] || ((TELEGRAM_ERROR_LOG_MAX_CHARS <= 0)); then
+  TELEGRAM_ERROR_LOG_MAX_CHARS=3500
+fi
+
+if ! [[ "$TELEGRAM_ERROR_LOG_TIMEOUT" =~ ^[0-9]+$ ]] || ((TELEGRAM_ERROR_LOG_TIMEOUT <= 0)); then
+  TELEGRAM_ERROR_LOG_TIMEOUT=10
+fi
+
+if ! [[ "$TELEGRAM_ERROR_LOG_RETRIES" =~ ^[0-9]+$ ]]; then
+  TELEGRAM_ERROR_LOG_RETRIES=2
+fi
+
+if ! [[ "$TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER" =~ ^[0-9]+$ ]] || ((TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER <= 0)); then
+  TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER=30
+fi
 
 FAILED_DOWNLOADS=()
+LAST_ERROR_LOG_FILE=""
+LAST_ERROR_STATUS=0
 ST_PID=""
 
 log() {
@@ -35,6 +59,7 @@ error() {
 
 die() {
   error "$*"
+  notify_telegram_error "$*"
   exit 1
 }
 
@@ -61,6 +86,156 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
+telegram_bot_token() {
+  printf '%s' "${MyD3_TELEGRAM_BOT_TOKEN:-${TELEGRAM_BOT_TOKEN:-}}"
+}
+
+telegram_chat_id() {
+  printf '%s' "${MyD3_TELEGRAM_CHAT_ID:-${TELEGRAM_CHAT_ID:-}}"
+}
+
+telegram_retry_after() {
+  local response_file="$1"
+
+  sed -n 's/.*"retry_after"[[:space:]]*:[[:space:]]*\([0-9]\+\).*/\1/p' "$response_file" | head -n 1
+}
+
+notify_telegram_error() {
+  local message="$1"
+  local details_file="${2:-}"
+  local token=""
+  local chat_id=""
+  local details=""
+  local text=""
+  local response_file=""
+  local http_code=""
+  local attempt=0
+  local retry_after=0
+  local sleep_seconds=0
+
+  is_truthy "$TELEGRAM_ERROR_LOGS" || return 0
+
+  token="$(telegram_bot_token)"
+  chat_id="$(telegram_chat_id)"
+  if [[ -z "$token" || -z "$chat_id" ]]; then
+    return 0
+  fi
+
+  if ! need_cmd curl; then
+    printf '[ENTRYPOINT] WARNING: curl not found; cannot send Telegram error log.\n' >&2
+    return 0
+  fi
+
+  if [[ -n "$details_file" && -s "$details_file" ]]; then
+    details="$(tail -c "$TELEGRAM_ERROR_LOG_MAX_CHARS" "$details_file" 2>/dev/null || true)"
+  fi
+
+  text="$(printf '[%s] ERROR\n%s' "$TELEGRAM_ERROR_LOG_NAME" "$message")"
+  if [[ -n "$details" ]]; then
+    text="${text}"$'\n\n'"Last output:"$'\n'"${details}"
+  fi
+
+  if ((${#text} > TELEGRAM_ERROR_LOG_MAX_CHARS)); then
+    text="${text:0:TELEGRAM_ERROR_LOG_MAX_CHARS}"$'\n'"... truncated"
+  fi
+
+  response_file="$(mktemp -t telegram-error-log.XXXXXX 2>/dev/null || true)"
+  if [[ -z "$response_file" ]]; then
+    printf '[ENTRYPOINT] WARNING: mktemp failed; cannot send Telegram error log.\n' >&2
+    return 0
+  fi
+
+  while ((attempt <= TELEGRAM_ERROR_LOG_RETRIES)); do
+    http_code=""
+    if ! http_code="$(curl -sS --max-time "$TELEGRAM_ERROR_LOG_TIMEOUT" \
+      -o "$response_file" \
+      -w '%{http_code}' \
+      --data-urlencode "chat_id=${chat_id}" \
+      --data-urlencode "text=${text}" \
+      "https://api.telegram.org/bot${token}/sendMessage")"; then
+      printf '[ENTRYPOINT] WARNING: Failed to send Telegram error log.\n' >&2
+      rm -f "$response_file"
+      return 0
+    fi
+
+    if [[ "$http_code" =~ ^2 ]]; then
+      rm -f "$response_file"
+      return 0
+    fi
+
+    if [[ "$http_code" == "429" && "$attempt" -lt "$TELEGRAM_ERROR_LOG_RETRIES" ]]; then
+      retry_after="$(telegram_retry_after "$response_file")"
+      if ! [[ "$retry_after" =~ ^[0-9]+$ ]] || ((retry_after <= 0)); then
+        retry_after=1
+      fi
+
+      sleep_seconds=$retry_after
+      if ((sleep_seconds > TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER)); then
+        sleep_seconds=$TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER
+      fi
+
+      printf '[ENTRYPOINT] WARNING: Telegram rate limited error log; retrying in %ss.\n' "$sleep_seconds" >&2
+      sleep "$sleep_seconds"
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    printf '[ENTRYPOINT] WARNING: Failed to send Telegram error log (HTTP %s): %s\n' "$http_code" "$(tr '\n' ' ' < "$response_file" 2>/dev/null)" >&2
+    rm -f "$response_file"
+    return 0
+  done
+
+  rm -f "$response_file"
+}
+
+on_unhandled_error() {
+  local status="$1"
+  local line="$2"
+  notify_telegram_error "Unhandled entrypoint error at line ${line} (exit code ${status})"
+}
+
+run_with_error_log() {
+  local output_file=""
+  local command_status=0
+  local restore_errexit=0
+
+  LAST_ERROR_LOG_FILE=""
+  LAST_ERROR_STATUS=0
+
+  output_file="$(mktemp -t entrypoint-error-log.XXXXXX 2>/dev/null || true)"
+  if [[ -z "$output_file" ]]; then
+    if "$@"; then
+      return 0
+    else
+      LAST_ERROR_STATUS=$?
+      return "$LAST_ERROR_STATUS"
+    fi
+  fi
+
+  case "$-" in
+    *e*)
+      restore_errexit=1
+      set +e
+      ;;
+  esac
+
+  "$@" 2>&1 | tee "$output_file"
+  command_status=${PIPESTATUS[0]}
+
+  if ((restore_errexit)); then
+    set -e
+  fi
+
+  if ((command_status == 0)); then
+    rm -f "$output_file"
+    return 0
+  fi
+
+  LAST_ERROR_STATUS=$command_status
+  LAST_ERROR_LOG_FILE="$output_file"
+  return "$LAST_ERROR_STATUS"
+}
+
 require_path() {
   local path="$1"
   local description="$2"
@@ -75,11 +250,13 @@ ensure_executable() {
 
 record_failure() {
   local message="$1"
+  local details_file="${2:-}"
   FAILED_DOWNLOADS+=("$message")
-  if is_truthy "$FAIL_FAST"; then
-    die "$message"
-  fi
   warn "$message"
+  notify_telegram_error "$message" "$details_file"
+  if is_truthy "$FAIL_FAST"; then
+    exit 1
+  fi
 }
 
 cleanup() {
@@ -91,6 +268,7 @@ cleanup() {
 }
 
 trap cleanup EXIT TERM INT
+trap 'on_unhandled_error "$?" "$LINENO"' ERR
 
 infer_filename() {
   local type="$1"
@@ -124,8 +302,9 @@ download_hf_url_if_missing() {
   log "Downloading from Hugging Face: ${filename}"
   log "Source URL: ${url}"
 
-  if ! "${HF_DOWNLOAD_BIN}" "${url}" "${outdir}"; then
-    record_failure "Hugging Face download failed for ${filename}"
+  if ! run_with_error_log "${HF_DOWNLOAD_BIN}" "${url}" "${outdir}"; then
+    record_failure "Hugging Face download failed for ${filename} (exit code ${LAST_ERROR_STATUS})" "$LAST_ERROR_LOG_FILE"
+    [[ -z "$LAST_ERROR_LOG_FILE" ]] || rm -f "$LAST_ERROR_LOG_FILE"
     return 0
   fi
 
@@ -148,8 +327,9 @@ download_civitai_if_missing() {
 
   log "Downloading from Civitai: ${expected_name:-$model_version_id}"
 
-  if ! "${CIVITAI_DOWNLOAD_BIN}" "${model_version_id}" "${outdir}" "${CIVITAI_TOKEN:-}" "${expected_name}"; then
-    record_failure "Civitai download failed for ${expected_name:-$model_version_id}"
+  if ! run_with_error_log "${CIVITAI_DOWNLOAD_BIN}" "${model_version_id}" "${outdir}" "${CIVITAI_TOKEN:-}" "${expected_name}"; then
+    record_failure "Civitai download failed for ${expected_name:-$model_version_id} (exit code ${LAST_ERROR_STATUS})" "$LAST_ERROR_LOG_FILE"
+    [[ -z "$LAST_ERROR_LOG_FILE" ]] || rm -f "$LAST_ERROR_LOG_FILE"
     return 0
   fi
 
@@ -258,23 +438,37 @@ process_manifest() {
 start_st() {
   local waited=0
 
+  if [[ -z "${MyD3_TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_BOT_TOKEN:-}" ]]; then
+    export MyD3_TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
+  fi
+
+  if [[ -z "${MyD3_TELEGRAM_CHAT_ID:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]]; then
+    export MyD3_TELEGRAM_CHAT_ID="$TELEGRAM_CHAT_ID"
+  fi
+
   if [[ -z "${MyD3_TELEGRAM_BOT_TOKEN:-}" || -z "${MyD3_TELEGRAM_CHAT_ID:-}" ]]; then
     warn "Telegram credentials (MyD3_TELEGRAM_BOT_TOKEN/MyD3_TELEGRAM_CHAT_ID) missing. Skipping st.py helper."
     return 0
   fi
 
   if [[ ! -e "$ST_PY_PATH" ]]; then
-    warn "st.py helper not found: ${ST_PY_PATH}. Continuing without st.py."
+    local message="st.py helper not found: ${ST_PY_PATH}. Continuing without st.py."
+    warn "$message"
+    notify_telegram_error "$message"
     return 0
   fi
 
   if [[ "$ST_PYTHON_BIN" == */* ]]; then
     if [[ ! -e "$ST_PYTHON_BIN" ]]; then
-      warn "st.py Python interpreter not found: ${ST_PYTHON_BIN}. Continuing without st.py."
+      local message="st.py Python interpreter not found: ${ST_PYTHON_BIN}. Continuing without st.py."
+      warn "$message"
+      notify_telegram_error "$message"
       return 0
     fi
   elif ! need_cmd "$ST_PYTHON_BIN"; then
-    warn "st.py Python interpreter not found on PATH: ${ST_PYTHON_BIN}. Continuing without st.py."
+    local message="st.py Python interpreter not found on PATH: ${ST_PYTHON_BIN}. Continuing without st.py."
+    warn "$message"
+    notify_telegram_error "$message"
     return 0
   fi
 
@@ -288,8 +482,11 @@ start_st() {
 
     if ! kill -0 "$ST_PID" 2>/dev/null; then
       local status=0
+      local message=""
       wait "$ST_PID" || status=$?
-      warn "st.py failed during startup (exit code ${status}). Continuing without st.py."
+      message="st.py failed during startup (exit code ${status}). Continuing without st.py."
+      warn "$message"
+      notify_telegram_error "$message"
       ST_PID=""
       return 0
     fi
@@ -297,8 +494,11 @@ start_st() {
 
   if ! kill -0 "$ST_PID" 2>/dev/null; then
     local status=0
+    local message=""
     wait "$ST_PID" || status=$?
-    warn "st.py is not running after startup (exit code ${status}). Continuing without st.py."
+    message="st.py is not running after startup (exit code ${status}). Continuing without st.py."
+    warn "$message"
+    notify_telegram_error "$message"
     ST_PID=""
     return 0
   fi
