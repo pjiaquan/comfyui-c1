@@ -259,11 +259,25 @@ start_st() {
   local waited=0
 
   if [[ -z "${MyD3_TELEGRAM_BOT_TOKEN:-}" || -z "${MyD3_TELEGRAM_CHAT_ID:-}" ]]; then
-    warn "Telegram credentials (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID) missing. Skipping st.py helper."
+    warn "Telegram credentials (MyD3_TELEGRAM_BOT_TOKEN/MyD3_TELEGRAM_CHAT_ID) missing. Skipping st.py helper."
     return 0
   fi
 
-  require_path "$ST_PY_PATH" "st.py helper"
+  if [[ ! -e "$ST_PY_PATH" ]]; then
+    warn "st.py helper not found: ${ST_PY_PATH}. Continuing without st.py."
+    return 0
+  fi
+
+  if [[ "$ST_PYTHON_BIN" == */* ]]; then
+    if [[ ! -e "$ST_PYTHON_BIN" ]]; then
+      warn "st.py Python interpreter not found: ${ST_PYTHON_BIN}. Continuing without st.py."
+      return 0
+    fi
+  elif ! need_cmd "$ST_PYTHON_BIN"; then
+    warn "st.py Python interpreter not found on PATH: ${ST_PYTHON_BIN}. Continuing without st.py."
+    return 0
+  fi
+
   log "Starting st.py helper"
   "${ST_PYTHON_BIN}" "${ST_PY_PATH}" &
   ST_PID=$!
@@ -273,14 +287,20 @@ start_st() {
     waited=$((waited + 1))
 
     if ! kill -0 "$ST_PID" 2>/dev/null; then
-      wait "$ST_PID" || true
-      die "st.py failed during startup"
+      local status=0
+      wait "$ST_PID" || status=$?
+      warn "st.py failed during startup (exit code ${status}). Continuing without st.py."
+      ST_PID=""
+      return 0
     fi
   done
 
   if ! kill -0 "$ST_PID" 2>/dev/null; then
-    wait "$ST_PID" || true
-    die "st.py is not running after startup"
+    local status=0
+    wait "$ST_PID" || status=$?
+    warn "st.py is not running after startup (exit code ${status}). Continuing without st.py."
+    ST_PID=""
+    return 0
   fi
 
   log "st.py started successfully (pid ${ST_PID})"

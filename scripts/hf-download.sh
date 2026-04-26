@@ -6,6 +6,7 @@ die() { echo "[ERROR] $*" >&2; exit 1; }
 
 PYTHON_BIN="${PYTHON_BIN:-/opt/venv/bin/python}"
 HF_BIN="${HF_BIN:-/opt/venv/bin/hf}"
+HF_AUTO_UPDATE="${HF_AUTO_UPDATE:-1}"
 
 INPUT_1="${1:-}"
 INPUT_2="${2:-}"
@@ -37,9 +38,20 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   die "Python not found: $PYTHON_BIN"
 fi
 
+if [[ "${HF_AUTO_UPDATE,,}" =~ ^(1|true|yes|on)$ ]]; then
+  log "Updating Hugging Face CLI before download..."
+  if ! "$PYTHON_BIN" -m pip install --break-system-packages -U "huggingface_hub[cli]"; then
+    log "Hugging Face CLI update failed. Continuing with installed version if available."
+  fi
+fi
+
 if ! command -v "$HF_BIN" >/dev/null 2>&1; then
-  log "hf CLI not found, installing/updating..."
+  log "hf CLI not found, installing..."
   "$PYTHON_BIN" -m pip install --break-system-packages -U "huggingface_hub[cli]"
+fi
+
+if ! command -v "$HF_BIN" >/dev/null 2>&1; then
+  die "hf CLI not found after install/update: $HF_BIN"
 fi
 
 if [ -n "${HF_TOKEN:-}" ]; then

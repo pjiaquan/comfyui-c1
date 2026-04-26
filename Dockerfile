@@ -1,4 +1,7 @@
-FROM nvidia/cuda:13.0.1-cudnn-runtime-ubuntu24.04
+ARG CUDA_IMAGE=nvidia/cuda:13.1.1-cudnn-runtime-ubuntu24.04
+FROM ${CUDA_IMAGE}
+
+ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
@@ -6,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     VENV_DIR=/opt/venv \
     COMFY_DIR=/opt/ComfyUI \
-    TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130 \
+    TORCH_INDEX_URL=${TORCH_INDEX_URL} \
     NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
