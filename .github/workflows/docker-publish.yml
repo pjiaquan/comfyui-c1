@@ -42,3 +42,4 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/comfyui-cu130:wan
+            ghcr.io/${{ steps.lower-repo.outputs.owner }}/comfyui-cu130:wan
