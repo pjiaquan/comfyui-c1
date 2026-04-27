@@ -12,6 +12,10 @@ ST_PYTHON_BIN="${ST_PYTHON_BIN:-${VENV_DIR}/bin/python3}"
 LISTEN_HOST="${LISTEN_HOST:-0.0.0.0}"
 PORT="${PORT:-8188}"
 VRAM_MODE="${VRAM_MODE:-auto}"
+# The bundled Wan 14B workflows can OOM on 24GB cards when highvram keeps
+# models resident, so auto mode only enables highvram on larger GPUs by default.
+VRAM_AUTO_HIGHVRAM_MIN_MB="${VRAM_AUTO_HIGHVRAM_MIN_MB:-32768}"
+VRAM_AUTO_LOWVRAM_BELOW_MB="${VRAM_AUTO_LOWVRAM_BELOW_MB:-8000}"
 FAIL_FAST="${FAIL_FAST:-0}"
 MANIFEST_REQUIRED="${MANIFEST_REQUIRED:-1}"
 ENABLE_ST="${ENABLE_ST:-1}"
@@ -38,6 +42,14 @@ fi
 
 if ! [[ "$TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER" =~ ^[0-9]+$ ]] || ((TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER <= 0)); then
   TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER=30
+fi
+
+if ! [[ "$VRAM_AUTO_HIGHVRAM_MIN_MB" =~ ^[0-9]+$ ]] || ((VRAM_AUTO_HIGHVRAM_MIN_MB <= 0)); then
+  VRAM_AUTO_HIGHVRAM_MIN_MB=32768
+fi
+
+if ! [[ "$VRAM_AUTO_LOWVRAM_BELOW_MB" =~ ^[0-9]+$ ]] || ((VRAM_AUTO_LOWVRAM_BELOW_MB <= 0)); then
+  VRAM_AUTO_LOWVRAM_BELOW_MB=8000
 fi
 
 FAILED_DOWNLOADS=()
@@ -514,9 +526,9 @@ build_comfy_command() {
       local vram_mb
       vram_mb=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | awk '{print $1}' | head -n 1)
       if [[ -n "$vram_mb" && "$vram_mb" =~ ^[0-9]+$ ]]; then
-        if (( vram_mb >= 16000 )); then
+        if (( vram_mb >= VRAM_AUTO_HIGHVRAM_MIN_MB )); then
           VRAM_MODE="highvram"
-        elif (( vram_mb < 8000 )); then
+        elif (( vram_mb < VRAM_AUTO_LOWVRAM_BELOW_MB )); then
           VRAM_MODE="lowvram"
         else
           VRAM_MODE="normalvram"
