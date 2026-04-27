@@ -126,9 +126,9 @@ RUN mkdir -p ${COMFY_DIR}/custom_nodes && \
     git clone --depth=1 https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git ${COMFY_DIR}/custom_nodes/ComfyUI-Custom-Scripts && \
     git clone --depth=1 https://github.com/stduhpf/ComfyUI-WanMoeKSampler.git ${COMFY_DIR}/custom_nodes/ComfyUI-WanMoeKSampler && \
     git clone --depth=1 https://github.com/chflame163/ComfyUI_LayerStyle.git ${COMFY_DIR}/custom_nodes/ComfyUI_LayerStyle && \
-    git clone --depth=1 https://github.com/ZHO-ZHO-ZHO/ComfyUI-SeedVR2.git ${COMFY_DIR}/custom_nodes/ComfyUI-SeedVR2 && \
+    git clone --depth=1 https://github.com/numz/ComfyUI-SeedVR2_VideoUpscaler.git ${COMFY_DIR}/custom_nodes/ComfyUI-SeedVR2_VideoUpscaler && \
     git clone --depth=1 https://github.com/Fannovel16/comfyui_controlnet_aux.git ${COMFY_DIR}/custom_nodes/comfyui_controlnet_aux && \
-    git clone --depth=1 https://github.com/Gourieff/comfyui-reactor-node.git ${COMFY_DIR}/custom_nodes/comfyui-reactor-node && \
+    git clone --depth=1 https://github.com/Gourieff/ComfyUI-ReActor.git ${COMFY_DIR}/custom_nodes/ComfyUI-ReActor && \
     git clone --depth=1 https://github.com/cubiq/ComfyUI_IPAdapter_plus.git ${COMFY_DIR}/custom_nodes/ComfyUI_IPAdapter_plus
 
 # 8) Install custom node requirements if present
