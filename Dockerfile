@@ -37,6 +37,8 @@ RUN touch /etc/passwd /etc/group && \
     grep -q '^root:' /etc/group || echo 'root:x:0:' >> /etc/group
 
 # 1) System dependencies
+#    libsm6 libxext6 libxrender-dev  – required by OpenCV (LayerStyle, controlnet_aux, ReActor)
+#    wget                            – used by some node install scripts
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.12 \
     python3.12-venv \
@@ -44,10 +46,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     git \
     curl \
+    wget \
     ca-certificates \
     ffmpeg \
     libgl1 \
     libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
@@ -60,7 +66,6 @@ RUN python3 -m venv ${VENV_DIR} && \
     ${VENV_DIR}/bin/python -m ensurepip --upgrade && \
     ${VENV_DIR}/bin/pip install --upgrade pip && \
     ${VENV_DIR}/bin/pip install "setuptools<82" wheel
-
 
 # 2.5) install watchdog
 RUN ${VENV_DIR}/bin/pip install watchdog
@@ -75,6 +80,8 @@ RUN mkdir -p \
     ${COMFY_DIR}/models/text_encoders \
     ${COMFY_DIR}/models/vae \
     ${COMFY_DIR}/models/loras \
+    ${COMFY_DIR}/models/diffusion_models \
+    ${COMFY_DIR}/models/unet \
     ${COMFY_DIR}/input \
     ${COMFY_DIR}/output
 
@@ -89,7 +96,7 @@ RUN ${VENV_DIR}/bin/pip install --upgrade \
 RUN ${VENV_DIR}/bin/pip install -r ${COMFY_DIR}/requirements.txt
 RUN ${VENV_DIR}/bin/python -m pip install -r ${COMFY_DIR}/manager_requirements.txt
 
-# 6) Extra packages you were installing manually
+# 6) Extra packages
 RUN ${VENV_DIR}/bin/pip install \
     sentencepiece \
     accelerate \
@@ -103,10 +110,10 @@ RUN mkdir -p ${COMFY_DIR}/custom_nodes && \
     git clone --depth=1 https://github.com/ClownsharkBatwing/RES4LYF.git ${COMFY_DIR}/custom_nodes/RES4LYF && \
     git clone --depth=1 https://github.com/alexopus/ComfyUI-Image-Saver.git ${COMFY_DIR}/custom_nodes/comfyui-image-saver && \
     git clone --depth=1 https://github.com/kijai/ComfyUI-KJNodes.git ${COMFY_DIR}/custom_nodes/comfyui-kjnodes && \
-    git clone --depth=1 https://github.com/cubiq/ComfyUI_essentials.git /opt/ComfyUI/custom_nodes/comfyui_essentials && \
-    git clone --depth=1 https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git /opt/ComfyUI/custom_nodes/comfyui-videohelpersuite && \
-    git clone --depth=1 https://github.com/yolain/ComfyUI-Easy-Use.git /opt/ComfyUI/custom_nodes/comfyui-easy-use && \
-    git clone --depth=1 https://github.com/IuvenisSapiens/ComfyUI_Qwen3-VL-Instruct.git /opt/ComfyUI/custom_nodes/ComfyUI_Qwen3-VL-Instruct && \
+    git clone --depth=1 https://github.com/cubiq/ComfyUI_essentials.git ${COMFY_DIR}/custom_nodes/comfyui_essentials && \
+    git clone --depth=1 https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git ${COMFY_DIR}/custom_nodes/comfyui-videohelpersuite && \
+    git clone --depth=1 https://github.com/yolain/ComfyUI-Easy-Use.git ${COMFY_DIR}/custom_nodes/comfyui-easy-use && \
+    git clone --depth=1 https://github.com/IuvenisSapiens/ComfyUI_Qwen3-VL-Instruct.git ${COMFY_DIR}/custom_nodes/ComfyUI_Qwen3-VL-Instruct && \
     git clone --depth=1 https://github.com/kijai/ComfyUI-GIMM-VFI.git ${COMFY_DIR}/custom_nodes/ComfyUI-GIMM-VFI && \
     git clone --depth=1 https://github.com/M1kep/ComfyLiterals.git ${COMFY_DIR}/custom_nodes/ComfyLiterals && \
     git clone --depth=1 https://github.com/boobkake22/ComfyUI-SimpleSwitch.git ${COMFY_DIR}/custom_nodes/ComfyUI-SimpleSwitch && \
@@ -117,7 +124,12 @@ RUN mkdir -p ${COMFY_DIR}/custom_nodes && \
     git clone --depth=1 https://github.com/Smirnov75/ComfyUI-mxToolkit.git ${COMFY_DIR}/custom_nodes/ComfyUI-mxToolkit && \
     git clone --depth=1 https://github.com/Fannovel16/ComfyUI-Frame-Interpolation.git ${COMFY_DIR}/custom_nodes/ComfyUI-Frame-Interpolation && \
     git clone --depth=1 https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git ${COMFY_DIR}/custom_nodes/ComfyUI-Custom-Scripts && \
-    git clone --depth=1 https://github.com/stduhpf/ComfyUI-WanMoeKSampler.git ${COMFY_DIR}/custom_nodes/ComfyUI-WanMoeKSampler
+    git clone --depth=1 https://github.com/stduhpf/ComfyUI-WanMoeKSampler.git ${COMFY_DIR}/custom_nodes/ComfyUI-WanMoeKSampler && \
+    git clone --depth=1 https://github.com/chflame163/ComfyUI_LayerStyle.git ${COMFY_DIR}/custom_nodes/ComfyUI_LayerStyle && \
+    git clone --depth=1 https://github.com/ZHO-ZHO-ZHO/ComfyUI-SeedVR2.git ${COMFY_DIR}/custom_nodes/ComfyUI-SeedVR2 && \
+    git clone --depth=1 https://github.com/Fannovel16/comfyui_controlnet_aux.git ${COMFY_DIR}/custom_nodes/comfyui_controlnet_aux && \
+    git clone --depth=1 https://github.com/Gourieff/comfyui-reactor-node.git ${COMFY_DIR}/custom_nodes/comfyui-reactor-node && \
+    git clone --depth=1 https://github.com/cubiq/ComfyUI_IPAdapter_plus.git ${COMFY_DIR}/custom_nodes/ComfyUI_IPAdapter_plus
 
 # 8) Install custom node requirements if present
 RUN find ${COMFY_DIR}/custom_nodes -maxdepth 2 -name requirements.txt -print0 | \
