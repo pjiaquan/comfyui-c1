@@ -12,9 +12,15 @@ ST_PYTHON_BIN="${ST_PYTHON_BIN:-${VENV_DIR}/bin/python3}"
 LISTEN_HOST="${LISTEN_HOST:-0.0.0.0}"
 PORT="${PORT:-8188}"
 VRAM_MODE="${VRAM_MODE:-auto}"
-# The bundled Wan 14B workflows can OOM on 24GB cards when highvram keeps
-# models resident, so auto mode only enables highvram on larger GPUs by default.
-VRAM_AUTO_HIGHVRAM_MIN_MB="${VRAM_AUTO_HIGHVRAM_MIN_MB:-32768}"
+# Three-tier VRAM auto-detection for ComfyUI:
+#   < VRAM_AUTO_LOWVRAM_BELOW_MB            → --lowvram  (very small GPUs)
+#   < VRAM_AUTO_NORMALVRAM_MIN_MB           → --lowvram  (24-29 GB: Wan 14B + loras need headroom)
+#   < VRAM_AUTO_HIGHVRAM_MIN_MB             → --normalvram
+#   >= VRAM_AUTO_HIGHVRAM_MIN_MB            → --highvram  (40 GB+ only)
+# Wan 14B fp8 text-encoder (~10.8 GB) + diffusion model (~14 GB) exceed 23.5 GB
+# usable on a 3090/4090, so 24 GB cards must use lowvram to allow CPU offload.
+VRAM_AUTO_HIGHVRAM_MIN_MB="${VRAM_AUTO_HIGHVRAM_MIN_MB:-40960}"
+VRAM_AUTO_NORMALVRAM_MIN_MB="${VRAM_AUTO_NORMALVRAM_MIN_MB:-30000}"
 VRAM_AUTO_LOWVRAM_BELOW_MB="${VRAM_AUTO_LOWVRAM_BELOW_MB:-8000}"
 FAIL_FAST="${FAIL_FAST:-0}"
 MANIFEST_REQUIRED="${MANIFEST_REQUIRED:-1}"
@@ -45,7 +51,11 @@ if ! [[ "$TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER" =~ ^[0-9]+$ ]] || ((TELEGRAM_ERROR
 fi
 
 if ! [[ "$VRAM_AUTO_HIGHVRAM_MIN_MB" =~ ^[0-9]+$ ]] || ((VRAM_AUTO_HIGHVRAM_MIN_MB <= 0)); then
-  VRAM_AUTO_HIGHVRAM_MIN_MB=32768
+  VRAM_AUTO_HIGHVRAM_MIN_MB=40960
+fi
+
+if ! [[ "$VRAM_AUTO_NORMALVRAM_MIN_MB" =~ ^[0-9]+$ ]] || ((VRAM_AUTO_NORMALVRAM_MIN_MB <= 0)); then
+  VRAM_AUTO_NORMALVRAM_MIN_MB=30000
 fi
 
 if ! [[ "$VRAM_AUTO_LOWVRAM_BELOW_MB" =~ ^[0-9]+$ ]] || ((VRAM_AUTO_LOWVRAM_BELOW_MB <= 0)); then
@@ -528,10 +538,13 @@ build_comfy_command() {
       if [[ -n "$vram_mb" && "$vram_mb" =~ ^[0-9]+$ ]]; then
         if (( vram_mb >= VRAM_AUTO_HIGHVRAM_MIN_MB )); then
           VRAM_MODE="highvram"
-        elif (( vram_mb < VRAM_AUTO_LOWVRAM_BELOW_MB )); then
-          VRAM_MODE="lowvram"
-        else
+        elif (( vram_mb >= VRAM_AUTO_NORMALVRAM_MIN_MB )); then
           VRAM_MODE="normalvram"
+        else
+          # Cards under VRAM_AUTO_NORMALVRAM_MIN_MB (default 30 GB) use lowvram.
+          # On 24 GB GPUs, Wan 14B fp8 text-encoder + diffusion model exceed
+          # available VRAM; lowvram lets ComfyUI offload to CPU between stages.
+          VRAM_MODE="lowvram"
         fi
         log "Auto-detected GPU with ${vram_mb}MB VRAM. Using ${VRAM_MODE} mode."
       else
