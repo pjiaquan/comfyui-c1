@@ -11,7 +11,7 @@ ST_PY_PATH="${ST_PY_PATH:-/opt/bin/st.py}"
 ST_PYTHON_BIN="${ST_PYTHON_BIN:-${VENV_DIR}/bin/python3}"
 LISTEN_HOST="${LISTEN_HOST:-0.0.0.0}"
 PORT="${PORT:-8188}"
-VRAM_MODE="${VRAM_MODE:-auto}"
+VRAM_MODE="${VRAM_MODE:-normalvram}"
 # Three-tier VRAM auto-detection for ComfyUI:
 #   < VRAM_AUTO_LOWVRAM_BELOW_MB            → --lowvram  (very small GPUs)
 #   < VRAM_AUTO_NORMALVRAM_MIN_MB           → --lowvram  (24-29 GB: Wan 14B + loras need headroom)
@@ -22,6 +22,7 @@ VRAM_MODE="${VRAM_MODE:-auto}"
 VRAM_AUTO_HIGHVRAM_MIN_MB="${VRAM_AUTO_HIGHVRAM_MIN_MB:-40960}"
 VRAM_AUTO_NORMALVRAM_MIN_MB="${VRAM_AUTO_NORMALVRAM_MIN_MB:-30000}"
 VRAM_AUTO_LOWVRAM_BELOW_MB="${VRAM_AUTO_LOWVRAM_BELOW_MB:-8000}"
+COMFY_AUTOSTART="${COMFY_AUTOSTART:-1}"
 FAIL_FAST="${FAIL_FAST:-0}"
 MANIFEST_REQUIRED="${MANIFEST_REQUIRED:-1}"
 ENABLE_ST="${ENABLE_ST:-1}"
@@ -619,6 +620,14 @@ main() {
 
   if [[ $# -gt 0 ]]; then
     comfy_cmd+=("$@")
+  fi
+
+  if ! is_truthy "$COMFY_AUTOSTART"; then
+    log "COMFY_AUTOSTART is disabled — ComfyUI will not start automatically."
+    log "To start ComfyUI manually, SSH into the container and run:"
+    log "  cd ${COMFY_DIR} && ${comfy_cmd[*]}"
+    log "Keeping container alive. Use 'docker exec' or SSH to interact."
+    exec sleep infinity
   fi
 
   cd "${COMFY_DIR}"
