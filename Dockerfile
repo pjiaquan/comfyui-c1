@@ -65,7 +65,7 @@ RUN python3 -m venv ${VENV_DIR} && \
 # 2.5) install watchdog
 RUN ${VENV_DIR}/bin/pip install watchdog
 
-RUN ${VENV_DIR}/bin/pip install "huggingface_hub[cli]"
+RUN ${VENV_DIR}/bin/pip install --upgrade huggingface_hub "typer>=0.20.0"
 
 # 3) Clone ComfyUI
 RUN git clone --depth=1 https://github.com/comfyanonymous/ComfyUI.git ${COMFY_DIR}
@@ -122,6 +122,9 @@ RUN mkdir -p ${COMFY_DIR}/custom_nodes && \
 # 8) Install custom node requirements if present
 RUN find ${COMFY_DIR}/custom_nodes -maxdepth 2 -name requirements.txt -print0 | \
     xargs -0 -I{} ${VENV_DIR}/bin/pip install -r "{}"
+
+# Some custom node requirements can downgrade shared CLI dependencies.
+RUN ${VENV_DIR}/bin/pip install --upgrade huggingface_hub "typer>=0.20.0"
 
 # 9) Manager config
 RUN mkdir -p ${COMFY_DIR}/user/__manager && \

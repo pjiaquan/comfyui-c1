@@ -5,7 +5,6 @@ log() { echo "[INFO] $*" >&2; }
 die() { echo "[ERROR] $*" >&2; exit 1; }
 
 PYTHON_BIN="${PYTHON_BIN:-/opt/venv/bin/python}"
-HF_BIN="${HF_BIN:-/opt/venv/bin/hf}"
 HF_AUTO_UPDATE="${HF_AUTO_UPDATE:-1}"
 
 INPUT_1="${1:-}"
@@ -34,24 +33,28 @@ if [ -z "$REPO_ID" ] || [ -z "$REPO_FILE" ] || [ -z "$TARGET_DIR" ]; then
   exit 1
 fi
 
+REPO_FILE="${REPO_FILE%%\?*}"
+FINAL_PATH="${TARGET_DIR}/$(basename "$REPO_FILE")"
+NESTED_PATH="${TARGET_DIR}/${REPO_FILE}"
+
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   die "Python not found: $PYTHON_BIN"
 fi
 
 if [[ "${HF_AUTO_UPDATE,,}" =~ ^(1|true|yes|on)$ ]]; then
-  log "Updating Hugging Face CLI before download..."
-  if ! "$PYTHON_BIN" -m pip install --break-system-packages -U "huggingface_hub[cli]"; then
-    log "Hugging Face CLI update failed. Continuing with installed version if available."
+  log "Updating Hugging Face Hub before download..."
+  if ! "$PYTHON_BIN" -m pip install --break-system-packages -U "huggingface_hub"; then
+    log "Hugging Face Hub update failed. Continuing with installed version if available."
   fi
 fi
 
-if ! command -v "$HF_BIN" >/dev/null 2>&1; then
-  log "hf CLI not found, installing..."
-  "$PYTHON_BIN" -m pip install --break-system-packages -U "huggingface_hub[cli]"
+if ! "$PYTHON_BIN" -c "import huggingface_hub" >/dev/null 2>&1; then
+  log "huggingface_hub not found, installing..."
+  "$PYTHON_BIN" -m pip install --break-system-packages -U "huggingface_hub"
 fi
 
-if ! command -v "$HF_BIN" >/dev/null 2>&1; then
-  die "hf CLI not found after install/update: $HF_BIN"
+if ! "$PYTHON_BIN" -c "import huggingface_hub" >/dev/null 2>&1; then
+  die "huggingface_hub not found after install/update."
 fi
 
 if [ -n "${HF_TOKEN:-}" ]; then
@@ -62,16 +65,64 @@ fi
 
 mkdir -p "$TARGET_DIR"
 
-EXPECTED_PATH_1="$TARGET_DIR/$(basename "$REPO_FILE")"
-EXPECTED_PATH_2="$TARGET_DIR/$REPO_FILE"
+cleanup_empty_dirs() {
+  local current_dir="$1"
+  local target_dir_abs=""
+  local current_dir_abs=""
 
-if [ -s "$EXPECTED_PATH_1" ]; then
-  log "File already exists, skipping: $EXPECTED_PATH_1"
+  target_dir_abs="$(cd "$TARGET_DIR" 2>/dev/null && pwd || echo "$TARGET_DIR")"
+
+  while [ -n "$current_dir" ] && [ "$current_dir" != "." ] && [ "$current_dir" != "/" ]; do
+    current_dir_abs="$(cd "$current_dir" 2>/dev/null && pwd || echo "$current_dir")"
+    if [ "$current_dir_abs" = "$target_dir_abs" ]; then
+      break
+    fi
+    rmdir "$current_dir" 2>/dev/null || break
+    current_dir="$(dirname "$current_dir")"
+  done
+}
+
+absolute_path() {
+  local path="$1"
+  local dir=""
+  local base=""
+  local dir_abs=""
+
+  dir="$(dirname "$path")"
+  base="$(basename "$path")"
+  dir_abs="$(cd "$dir" 2>/dev/null && pwd -P || echo "$dir")"
+  printf '%s/%s' "$dir_abs" "$base"
+}
+
+flatten_downloaded_file() {
+  local source_path="$1"
+  local source_abs=""
+  local final_abs=""
+
+  if [ ! -f "$source_path" ] || [ ! -s "$source_path" ]; then
+    return 1
+  fi
+
+  source_abs="$(absolute_path "$source_path")"
+  final_abs="$(absolute_path "$FINAL_PATH")"
+
+  if [ "$source_abs" != "$final_abs" ]; then
+    log "Flattening downloaded file: ${source_path} -> ${FINAL_PATH}"
+    mv -f "$source_path" "$FINAL_PATH"
+    cleanup_empty_dirs "$(dirname "$source_path")"
+  fi
+
+  return 0
+}
+
+if [ -s "$FINAL_PATH" ]; then
+  log "File already exists, skipping: $FINAL_PATH"
   exit 0
 fi
 
-if [ -s "$EXPECTED_PATH_2" ]; then
-  log "File already exists, skipping: $EXPECTED_PATH_2"
+if [ -s "$NESTED_PATH" ]; then
+  flatten_downloaded_file "$NESTED_PATH" || die "Failed to flatten existing download: $NESTED_PATH"
+  log "Success: $FINAL_PATH"
   exit 0
 fi
 
@@ -79,30 +130,42 @@ log "Downloading: $REPO_FILE"
 log "From Repo:  $REPO_ID"
 log "To Dir:     $TARGET_DIR"
 
-DOWNLOADED_PATH="$("$HF_BIN" download "$REPO_ID" "$REPO_FILE" \
-  --local-dir "$TARGET_DIR" | tail -n 1)"
+DOWNLOAD_OUTPUT="$(mktemp -t hf-download-output.XXXXXX)"
+if ! "$PYTHON_BIN" - "$REPO_ID" "$REPO_FILE" "$TARGET_DIR" <<'PY' | tee "$DOWNLOAD_OUTPUT"; then
+import os
+import sys
 
-if [ -z "$DOWNLOADED_PATH" ] || [ ! -f "$DOWNLOADED_PATH" ] || [ ! -s "$DOWNLOADED_PATH" ]; then
+from huggingface_hub import hf_hub_download
+
+repo_id, repo_file, target_dir = sys.argv[1:4]
+downloaded_path = hf_hub_download(
+    repo_id=repo_id,
+    filename=repo_file,
+    local_dir=target_dir,
+    token=os.environ.get("HF_TOKEN") or None,
+)
+print(downloaded_path)
+PY
+  rm -f "$DOWNLOAD_OUTPUT"
   die "Download failed."
 fi
 
-FINAL_PATH="${TARGET_DIR}/$(basename "$REPO_FILE")"
+DOWNLOADED_PATH="$(tail -n 1 "$DOWNLOAD_OUTPUT")"
+rm -f "$DOWNLOAD_OUTPUT"
 
-if [ "$DOWNLOADED_PATH" != "$FINAL_PATH" ]; then
-  mv -f "$DOWNLOADED_PATH" "$FINAL_PATH"
-  
-  # Clean up residual empty directories created by Hugging Face CLI when path has subfolders
-  CURRENT_DIR="$(dirname "$DOWNLOADED_PATH")"
-  TARGET_DIR_ABS="$(cd "$TARGET_DIR" 2>/dev/null && pwd || echo "$TARGET_DIR")"
-  
-  while [ -n "$CURRENT_DIR" ] && [ "$CURRENT_DIR" != "." ] && [ "$CURRENT_DIR" != "/" ]; do
-    CURRENT_DIR_ABS="$(cd "$CURRENT_DIR" 2>/dev/null && pwd || echo "$CURRENT_DIR")"
-    if [ "$CURRENT_DIR_ABS" = "$TARGET_DIR_ABS" ]; then
-      break
-    fi
-    rmdir "$CURRENT_DIR" 2>/dev/null || break
-    CURRENT_DIR="$(dirname "$CURRENT_DIR")"
-  done
+if flatten_downloaded_file "$NESTED_PATH"; then
+  log "Success: $FINAL_PATH"
+  exit 0
 fi
 
-log "Success: $FINAL_PATH"
+if flatten_downloaded_file "$DOWNLOADED_PATH"; then
+  log "Success: $FINAL_PATH"
+  exit 0
+fi
+
+if flatten_downloaded_file "$FINAL_PATH"; then
+  log "Success: $FINAL_PATH"
+  exit 0
+fi
+
+die "Download completed, but expected file was not found: ${FINAL_PATH} or ${NESTED_PATH}"
