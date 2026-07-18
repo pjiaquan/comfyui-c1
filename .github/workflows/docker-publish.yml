@@ -34,7 +34,7 @@ jobs:
           # Disable provenance attestation – avoids OCI index push errors on Docker Hub free tier
           provenance: false
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/comfyui-cu130:wan
-            ${{ secrets.DOCKERHUB_USERNAME }}/comfyui-cu130:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/comfyui-cu128:wan
+            ${{ secrets.DOCKERHUB_USERNAME }}/comfyui-cu128:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max

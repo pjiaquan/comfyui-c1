@@ -1,7 +1,11 @@
-ARG CUDA_IMAGE=nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+ARG CUDA_IMAGE=nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
 FROM ${CUDA_IMAGE}
 
-ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130
+# cu128 supports all target GPUs (RTX 3090 sm_86, 4090 sm_89, 5090 Blackwell sm_120)
+# and requires host NVIDIA driver >= 570.x. cu124 lacks Blackwell kernels (no 5090);
+# cu130 needs driver >= 580 and triggers error 804 (forward-compat not supported on
+# consumer GeForce) on 3090/4090 hosts with older drivers.
+ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu128
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
