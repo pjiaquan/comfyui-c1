@@ -1,11 +1,11 @@
-ARG CUDA_IMAGE=nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+ARG CUDA_IMAGE=nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 FROM ${CUDA_IMAGE}
 
-# cu128 supports all target GPUs (RTX 3090 sm_86, 4090 sm_89, 5090 Blackwell sm_120)
-# and requires host NVIDIA driver >= 570.x. cu124 lacks Blackwell kernels (no 5090);
-# cu130 needs driver >= 580 and triggers error 804 (forward-compat not supported on
-# consumer GeForce) on 3090/4090 hosts with older drivers.
-ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu128
+# cu124 targets RTX 3090 (sm_86) on RunPod, where the host driver is fixed by the pod
+# and cannot be upgraded. cu124 needs driver >= 550.x and works on 550/570/580 pods.
+# cu130 needs driver >= 580 and triggers CUDA error 804 (forward-compat not supported
+# on consumer GeForce) on 3090 pods with older drivers. For a 535 pod, fall back to cu121.
+ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu124
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
