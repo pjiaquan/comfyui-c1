@@ -1,4 +1,4 @@
-ARG CUDA_IMAGE=nvidia/cuda:13.1.1-cudnn-runtime-ubuntu24.04
+ARG CUDA_IMAGE=nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 FROM ${CUDA_IMAGE}
 
 ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130
@@ -26,6 +26,7 @@ COPY scripts/download.sh /opt/bin/download.sh
 COPY scripts/st.py /opt/bin/st.py
 COPY scripts/entrypoint.sh /opt/bin/entrypoint.sh
 COPY scripts/models.manifest /opt/config/models.manifest
+COPY scripts/manifests/*.manifest /opt/config/
 
 RUN chmod +x /opt/bin/hf-download.sh /opt/bin/civitai-download.sh /opt/bin/download.sh
 RUN chmod +x /opt/bin/entrypoint.sh
@@ -39,9 +40,10 @@ RUN touch /etc/passwd /etc/group && \
 # 1) System dependencies
 #    libsm6 libxext6 libxrender-dev  – required by OpenCV (LayerStyle, controlnet_aux, ReActor)
 #    wget                            – used by some node install scripts
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.12 \
-    python3.12-venv \
+    python3 \
+    python3-venv \
     python3-pip \
     python3-dev \
     git \

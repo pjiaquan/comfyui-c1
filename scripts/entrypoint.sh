@@ -4,24 +4,23 @@ set -Eeuo pipefail
 COMFY_DIR="${COMFY_DIR:-/opt/ComfyUI}"
 VENV_DIR="${VENV_DIR:-/opt/venv}"
 PYTHON_BIN="${PYTHON_BIN:-${VENV_DIR}/bin/python}"
-MANIFEST_PATH="${MANIFEST_PATH:-/opt/config/models.manifest}"
+MANIFEST_DIR="${MANIFEST_DIR:-/opt/config}"
+MODEL_SET="${MODEL_SET:-default}"
+MANIFEST_PATH="${MANIFEST_PATH:-}"
+if [[ -z "$MANIFEST_PATH" ]]; then
+  if [[ "$MODEL_SET" == "default" && -f "${MANIFEST_DIR}/models.manifest" ]]; then
+    MANIFEST_PATH="${MANIFEST_DIR}/models.manifest"
+  else
+    MANIFEST_PATH="${MANIFEST_DIR}/models.${MODEL_SET}.manifest"
+  fi
+fi
 HF_DOWNLOAD_BIN="${HF_DOWNLOAD_BIN:-/opt/bin/hf-download.sh}"
 CIVITAI_DOWNLOAD_BIN="${CIVITAI_DOWNLOAD_BIN:-/opt/bin/civitai-download.sh}"
 ST_PY_PATH="${ST_PY_PATH:-/opt/bin/st.py}"
 ST_PYTHON_BIN="${ST_PYTHON_BIN:-${VENV_DIR}/bin/python3}"
 LISTEN_HOST="${LISTEN_HOST:-0.0.0.0}"
 PORT="${PORT:-8188}"
-VRAM_MODE="${VRAM_MODE:-normalvram}"
-# Three-tier VRAM auto-detection for ComfyUI:
-#   < VRAM_AUTO_LOWVRAM_BELOW_MB            → --lowvram  (very small GPUs)
-#   < VRAM_AUTO_NORMALVRAM_MIN_MB           → --lowvram  (24-29 GB: Wan 14B + loras need headroom)
-#   < VRAM_AUTO_HIGHVRAM_MIN_MB             → --normalvram
-#   >= VRAM_AUTO_HIGHVRAM_MIN_MB            → --highvram  (40 GB+ only)
-# Wan 14B fp8 text-encoder (~10.8 GB) + diffusion model (~14 GB) exceed 23.5 GB
-# usable on a 3090/4090, so 24 GB cards must use lowvram to allow CPU offload.
-VRAM_AUTO_HIGHVRAM_MIN_MB="${VRAM_AUTO_HIGHVRAM_MIN_MB:-40960}"
-VRAM_AUTO_NORMALVRAM_MIN_MB="${VRAM_AUTO_NORMALVRAM_MIN_MB:-30000}"
-VRAM_AUTO_LOWVRAM_BELOW_MB="${VRAM_AUTO_LOWVRAM_BELOW_MB:-8000}"
+
 COMFY_AUTOSTART="${COMFY_AUTOSTART:-1}"
 FAIL_FAST="${FAIL_FAST:-0}"
 MANIFEST_REQUIRED="${MANIFEST_REQUIRED:-1}"
@@ -51,17 +50,6 @@ if ! [[ "$TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER" =~ ^[0-9]+$ ]] || ((TELEGRAM_ERROR
   TELEGRAM_ERROR_LOG_MAX_RETRY_AFTER=30
 fi
 
-if ! [[ "$VRAM_AUTO_HIGHVRAM_MIN_MB" =~ ^[0-9]+$ ]] || ((VRAM_AUTO_HIGHVRAM_MIN_MB <= 0)); then
-  VRAM_AUTO_HIGHVRAM_MIN_MB=40960
-fi
-
-if ! [[ "$VRAM_AUTO_NORMALVRAM_MIN_MB" =~ ^[0-9]+$ ]] || ((VRAM_AUTO_NORMALVRAM_MIN_MB <= 0)); then
-  VRAM_AUTO_NORMALVRAM_MIN_MB=30000
-fi
-
-if ! [[ "$VRAM_AUTO_LOWVRAM_BELOW_MB" =~ ^[0-9]+$ ]] || ((VRAM_AUTO_LOWVRAM_BELOW_MB <= 0)); then
-  VRAM_AUTO_LOWVRAM_BELOW_MB=8000
-fi
 
 FAILED_DOWNLOADS=()
 LAST_ERROR_LOG_FILE=""
@@ -532,48 +520,11 @@ start_st() {
 build_comfy_command() {
   local -n _cmd_ref=$1
 
-  if [[ "$VRAM_MODE" == "auto" ]]; then
-    if need_cmd nvidia-smi; then
-      local vram_mb
-      vram_mb=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | awk '{print $1}' | head -n 1)
-      if [[ -n "$vram_mb" && "$vram_mb" =~ ^[0-9]+$ ]]; then
-        if (( vram_mb >= VRAM_AUTO_HIGHVRAM_MIN_MB )); then
-          VRAM_MODE="highvram"
-        elif (( vram_mb >= VRAM_AUTO_NORMALVRAM_MIN_MB )); then
-          VRAM_MODE="normalvram"
-        else
-          # Cards under VRAM_AUTO_NORMALVRAM_MIN_MB (default 30 GB) use lowvram.
-          # On 24 GB GPUs, Wan 14B fp8 text-encoder + diffusion model exceed
-          # available VRAM; lowvram lets ComfyUI offload to CPU between stages.
-          VRAM_MODE="lowvram"
-        fi
-        log "Auto-detected GPU with ${vram_mb}MB VRAM. Using ${VRAM_MODE} mode."
-      else
-        VRAM_MODE="normalvram"
-        warn "Could not parse VRAM from nvidia-smi. Falling back to normalvram."
-      fi
-    else
-      VRAM_MODE="cpu"
-      log "nvidia-smi not found. Falling back to cpu mode."
-    fi
-  fi
-
   _cmd_ref=(
     "${PYTHON_BIN}" main.py
     --listen "${LISTEN_HOST}"
     --port "${PORT}"
   )
-
-  case "$VRAM_MODE" in
-    normalvram|lowvram|novram|highvram|gpu-only|cpu)
-      _cmd_ref+=("--${VRAM_MODE}")
-      ;;
-    "")
-      ;;
-    *)
-      die "Unsupported VRAM_MODE: ${VRAM_MODE}"
-      ;;
-  esac
 
   if is_truthy "$ENABLE_MANAGER"; then
     _cmd_ref+=(--enable-manager)
@@ -605,6 +556,7 @@ main() {
     "${COMFY_DIR}/input" \
     "${COMFY_DIR}/output"
 
+  log "Using manifest: ${MANIFEST_PATH} (MODEL_SET=${MODEL_SET})"
   process_manifest "${MANIFEST_PATH}"
 
   if ((${#FAILED_DOWNLOADS[@]} > 0)); then
