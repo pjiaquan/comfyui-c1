@@ -29,6 +29,14 @@ COMFY_AUTOSTART="${COMFY_AUTOSTART:-1}"
 # the old behaviour where ComfyUI is exec'd as PID 1 and its crash exits the
 # container.
 COMFY_KEEPALIVE_ON_CRASH="${COMFY_KEEPALIVE_ON_CRASH:-1}"
+# SSH / SFTP server. When SSH_ENABLE=1 (default), the entrypoint starts sshd so
+# you can SFTP in (e.g. to drop models straight into /opt/ComfyUI/models). Auth is
+# key-only: put one or more public keys in SSH_PUBKEYS (newline-separated) or
+# point SSH_AUTHORIZED_KEYS_FILE at a mounted file. Set SSH_ENABLE=0 to disable.
+SSH_ENABLE="${SSH_ENABLE:-1}"
+SSH_PORT="${SSH_PORT:-22}"
+SSH_PUBKEYS="${SSH_PUBKEYS:-}"
+SSH_AUTHORIZED_KEYS_FILE="${SSH_AUTHORIZED_KEYS_FILE:-}"
 FAIL_FAST="${FAIL_FAST:-0}"
 MANIFEST_REQUIRED="${MANIFEST_REQUIRED:-1}"
 ENABLE_ST="${ENABLE_ST:-1}"
@@ -524,6 +532,67 @@ start_st() {
   log "st.py started successfully (pid ${ST_PID})"
 }
 
+setup_ssh() {
+  is_truthy "$SSH_ENABLE" || return 0
+
+  if ! need_cmd sshd; then
+    warn "SSH/SFTP requested (SSH_ENABLE=1) but sshd not found — openssh-server not installed in this image. Skipping."
+    return 0
+  fi
+
+  # Host keys: regenerate per container instance so each pod has its own.
+  if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
+    log "Generating SSH host keys..."
+    ssh-keygen -A >/dev/null 2>&1 || warn "ssh-keygen -A failed; sshd may not start."
+  fi
+
+  # Authorised keys for root. We run as root so SFTP can write the model dirs.
+  mkdir -p /root/.ssh
+  chmod 700 /root/.ssh
+  local ak_file="/root/.ssh/authorized_keys"
+  : > "$ak_file"
+  chmod 600 "$ak_file"
+  if [[ -n "$SSH_AUTHORIZED_KEYS_FILE" && -f "$SSH_AUTHORIZED_KEYS_FILE" ]]; then
+    cat "$SSH_AUTHORIZED_KEYS_FILE" >> "$ak_file"
+  fi
+  if [[ -n "$SSH_PUBKEYS" ]]; then
+    printf '%s\n' "$SSH_PUBKEYS" >> "$ak_file"
+  fi
+  if [[ ! -s "$ak_file" ]]; then
+    warn "SSH/SFTP enabled but no public keys configured (SSH_PUBKEYS / SSH_AUTHORIZED_KEYS_FILE empty). sshd will start but key auth will reject every login."
+  fi
+
+  # Drop-in overrides. Do NOT set Subsystem here — the default sftp subsystem is
+  # already enabled, and a second Subsystem line would make `sshd -t` fail.
+  mkdir -p /etc/ssh/sshd_config.d /run/sshd
+  local dropin="/etc/ssh/sshd_config.d/00-comfy.conf"
+  cat > "$dropin" <<EOF
+Port ${SSH_PORT}
+PermitRootLogin prohibit-password
+PasswordAuthentication no
+PubkeyAuthentication yes
+EOF
+
+  if ! sshd -t 2>/dev/null; then
+    warn "sshd -t failed with drop-in (Include may be missing); applying overrides to main sshd_config instead."
+    rm -f "$dropin"
+    {
+      echo "Port ${SSH_PORT}"
+      echo "PermitRootLogin prohibit-password"
+      echo "PasswordAuthentication no"
+      echo "PubkeyAuthentication yes"
+    } >> /etc/ssh/sshd_config
+    sshd -t 2>/dev/null || { warn "sshd config still invalid; SFTP disabled."; return 0; }
+  fi
+
+  log "Starting sshd (SFTP) on port ${SSH_PORT}..."
+  if /usr/sbin/sshd; then
+    log "sshd started. SFTP: sftp -P ${SSH_PORT} root@<host>"
+  else
+    warn "Failed to start sshd; SFTP disabled."
+  fi
+}
+
 build_comfy_command() {
   local -n _cmd_ref=$1
 
@@ -562,6 +631,8 @@ main() {
     "${COMFY_DIR}/models/diffusion_models" \
     "${COMFY_DIR}/input" \
     "${COMFY_DIR}/output"
+
+  setup_ssh
 
   log "Using manifest: ${MANIFEST_PATH} (MODEL_SET=${MODEL_SET})"
   process_manifest "${MANIFEST_PATH}"

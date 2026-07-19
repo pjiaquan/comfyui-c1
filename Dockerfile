@@ -54,6 +54,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     ca-certificates \
+    openssh-server \
+    openssh-client \
     ffmpeg \
     libgl1 \
     libglib2.0-0 \
@@ -172,6 +174,6 @@ import sys
 print("Python:", sys.version)
 PY
 
-EXPOSE 8188
+EXPOSE 8188 22
 
 ENTRYPOINT ["/opt/bin/entrypoint.sh"]
