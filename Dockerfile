@@ -114,6 +114,7 @@ RUN ${VENV_DIR}/bin/pip install \
 # 7) Custom nodes
 RUN mkdir -p ${COMFY_DIR}/custom_nodes && \
     git clone --depth=1 https://github.com/ltdrdata/ComfyUI-Manager.git ${COMFY_DIR}/custom_nodes/ComfyUI-Manager && \
+    git clone --depth=1 https://github.com/lbouaraba/comfyui-krea2edit.git ${COMFY_DIR}/custom_nodes/comfyui-krea2edit && \
     git clone --depth=1 https://github.com/rgthree/rgthree-comfy.git ${COMFY_DIR}/custom_nodes/rgthree-comfy && \
     git clone --depth=1 https://github.com/ClownsharkBatwing/RES4LYF.git ${COMFY_DIR}/custom_nodes/RES4LYF && \
     git clone --depth=1 https://github.com/alexopus/ComfyUI-Image-Saver.git ${COMFY_DIR}/custom_nodes/comfyui-image-saver && \

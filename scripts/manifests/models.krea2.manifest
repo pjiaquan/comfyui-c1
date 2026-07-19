@@ -7,6 +7,9 @@
 # --- Krea 2 checkpoint / diffusion model 範例 ---
 HF|https://huggingface.co/krea/Krea-2-Turbo/resolve/main/turbo.safetensors|/opt/ComfyUI/models/checkpoints|krea2_turbo.safetensors
 
+HF|https://huggingface.co/Comfy-Org/Krea-2/resolve/main/text_encoders/qwen3vl_4b_bf16.safetensors|/opt/ComfyUI/models/text_encoders/text_encoders/qwen3vl_4b_bf16.safetensors
+HF|https://huggingface.co/Kijai/WanVideo_comfy/resolve/main/Wan2_1_VAE_fp32.safetensors|/opt/ComfyUI/models/vae/|Wan2_1_VAE_fp32.safetensors
+
 # --- Krea 2 LoRA / diffusion_model 範例 ---
 # HF|https://huggingface.co/<owner>/krea2-lora/resolve/main/krea2_lora.safetensors|/opt/ComfyUI/models/loras|krea2_lora.safetensors
 HF|https://huggingface.co/conradlocke/krea2-identity-edit/resolve/main/krea2_identity_edit_v1_2.safetensors|/opt/ComfyUI/models/loras|krea2_identity_edit_v1_2.safetensors
@@ -16,3 +19,4 @@ HF|https://huggingface.co/conradlocke/krea2-identity-edit/resolve/main/krea2_ide
 
 
 CIVITAI|3078453|/opt/ComfyUI/models/checkpoints|dark_beast_krea2.safetensors
+
