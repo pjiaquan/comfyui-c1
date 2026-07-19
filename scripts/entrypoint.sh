@@ -22,6 +22,13 @@ LISTEN_HOST="${LISTEN_HOST:-0.0.0.0}"
 PORT="${PORT:-8188}"
 
 COMFY_AUTOSTART="${COMFY_AUTOSTART:-1}"
+# When 1 (default), a ComfyUI crash no longer kills the container: the entrypoint
+# runs ComfyUI as a child of PID 1 and, on an un-signalled crash, falls through to
+# `sleep infinity` so SSH stays connected and RunPod does not restart-loop (a loop
+# would also re-run the full manifest download on every cycle). Set to 0 to restore
+# the old behaviour where ComfyUI is exec'd as PID 1 and its crash exits the
+# container.
+COMFY_KEEPALIVE_ON_CRASH="${COMFY_KEEPALIVE_ON_CRASH:-1}"
 FAIL_FAST="${FAIL_FAST:-0}"
 MANIFEST_REQUIRED="${MANIFEST_REQUIRED:-1}"
 ENABLE_ST="${ENABLE_ST:-1}"
@@ -584,7 +591,47 @@ main() {
 
   cd "${COMFY_DIR}"
   log "Launching ComfyUI: ${comfy_cmd[*]}"
-  exec "${comfy_cmd[@]}"
+
+  if ! is_truthy "$COMFY_KEEPALIVE_ON_CRASH"; then
+    exec "${comfy_cmd[@]}"
+  fi
+
+  # Run ComfyUI as a child of this shell (PID 1) instead of exec'ing it, so a
+  # ComfyUI crash does not take the container down. On a stop signal we exit
+  # normally (clean shutdown / redeploy); on an un-signalled crash we keep the
+  # container alive with `sleep infinity` so SSH stays up and RunPod does not
+  # restart-loop.
+  COMFY_CRASH_PID=""
+  COMFY_CRASH_SIGNAL=0
+  local comfy_status=0
+
+  comfy_forward_signal() {
+    COMFY_CRASH_SIGNAL=1
+    [[ -n "$COMFY_CRASH_PID" ]] && kill -TERM "$COMFY_CRASH_PID" 2>/dev/null || true
+  }
+  trap comfy_forward_signal TERM INT
+
+  "${comfy_cmd[@]}" &
+  COMFY_CRASH_PID=$!
+  wait "$COMFY_CRASH_PID" || comfy_status=$?
+  COMFY_CRASH_PID=""
+  trap - TERM INT
+
+  if (( COMFY_CRASH_SIGNAL == 1 )); then
+    log "Stop signal received; exiting container (ComfyUI exit code ${comfy_status})."
+    exit "$comfy_status"
+  fi
+
+  if (( comfy_status == 0 )); then
+    log "ComfyUI exited cleanly (exit code 0). Keeping container alive (COMFY_KEEPALIVE_ON_CRASH=1)."
+  else
+    warn "ComfyUI exited with code ${comfy_status}. Keeping container alive to preserve SSH and avoid restart loop (COMFY_KEEPALIVE_ON_CRASH=1)."
+    notify_telegram_error "ComfyUI exited with code ${comfy_status}; container kept alive for debugging."
+  fi
+  log "Container kept alive. SSH in / docker exec to debug, then restart ComfyUI manually:"
+  log "  cd ${COMFY_DIR} && ${comfy_cmd[*]}"
+  log "To pick up a new image, redeploy the pod so it pulls the latest tag."
+  exec sleep infinity
 }
 
 main "$@"
