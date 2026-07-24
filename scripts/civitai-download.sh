@@ -29,12 +29,22 @@ need_cmd ls || die "ls is required."
 mkdir -p "$DEST_DIR"
 
 if [[ "$INPUT_TARGET" =~ ^https?:// ]]; then
-  DOWNLOAD_URL="$INPUT_TARGET"
-  if [[ "$INPUT_TARGET" =~ /models/([0-9]+) ]]; then
+  # Prefer explicit modelVersionId in the query string.
+  re_q='[?&]modelVersionId=([0-9]+)'
+  re_p='/models/([0-9]+)'
+  if [[ "$INPUT_TARGET" =~ $re_q ]]; then
     MODEL_VERSION_ID="${BASH_REMATCH[1]}"
+  elif [[ "$INPUT_TARGET" =~ $re_p ]]; then
+    # Only a model ID (not a version ID) is available. This may resolve to the
+    # wrong file; warn so the user knows to pass modelVersionId.
+    MODEL_VERSION_ID="${BASH_REMATCH[1]}"
+    log "Warning: no modelVersionId in URL; using model ID ${MODEL_VERSION_ID} as version id (may be incorrect)."
   else
-    MODEL_VERSION_ID="unknown_model"
+    die "Could not parse model/version id from URL: $INPUT_TARGET"
   fi
+  # Always use the canonical CivitAI download endpoint, ignoring the input host
+  # (e.g. civitai.red proxies do not honor Content-Disposition / downloads).
+  DOWNLOAD_URL="https://civitai.com/api/download/models/${MODEL_VERSION_ID}"
 else
   MODEL_VERSION_ID="$INPUT_TARGET"
   DOWNLOAD_URL="https://civitai.com/api/download/models/${MODEL_VERSION_ID}"
