@@ -1,21 +1,33 @@
 name: Build and Push Docker Images
 
+# Builds are triggered manually via workflow_dispatch with a target selector.
+# Pushing to main no longer auto-builds — run the workflow and pick cu128 / cu124 / both.
 on:
-  push:
-    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      build_target:
+        description: "Which CUDA image variant to build"
+        type: choice
+        options:
+          - cu128
+          - cu124
+          - both
+        default: cu128
 
 jobs:
-  build-and-push:
+  # cu124 targets RTX 3090 (sm_86) on RunPod; the host driver is fixed by the pod
+  # and cannot be upgraded. cu124 needs driver >= 550.x and works on 550/570/580 pods.
+  build-cu124:
+    if: inputs.build_target == 'cu124' || inputs.build_target == 'both'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write   # needed if ever pushing to GHCR; harmless for Docker Hub
+      packages: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      # Buildx must be set up before login so the builder is ready
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -31,10 +43,49 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          # Disable provenance attestation – avoids OCI index push errors on Docker Hub free tier
           provenance: false
+          build-args: |
+            CUDA_IMAGE=nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+            TORCH_INDEX_URL=https://download.pytorch.org/whl/cu124
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/comfyui-cu124:wan
             ${{ secrets.DOCKERHUB_USERNAME }}/comfyui-cu124:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # cu128 targets newer pods with driver >= 570 (e.g. RTX 4090/5090).
+  build-cu128:
+    if: inputs.build_target == 'cu128' || inputs.build_target == 'both'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          provenance: false
+          build-args: |
+            CUDA_IMAGE=nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+            TORCH_INDEX_URL=https://download.pytorch.org/whl/cu128
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/comfyui-cu128:wan
+            ${{ secrets.DOCKERHUB_USERNAME }}/comfyui-cu128:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
